@@ -49,9 +49,10 @@ jobs:
 
       - run: npm ci
 
+      # Trusted publishing over OIDC needs npm 11.5.1+, setup-node ships 10.x with Node 22.
+      - run: npm install -g npm@latest
+
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   github-packages:
     needs: verify
