@@ -41,10 +41,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No registry-url on purpose: it makes setup-node write an .npmrc with a
+      # placeholder NODE_AUTH_TOKEN, and npm then authenticates with that
+      # placeholder instead of exchanging the OIDC token. registry.npmjs.org is
+      # the default registry anyway.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          registry-url: https://registry.npmjs.org
           cache: npm
 
       - run: npm ci
