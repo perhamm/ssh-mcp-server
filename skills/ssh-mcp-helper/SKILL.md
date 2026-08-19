@@ -140,6 +140,34 @@ Tell the user how the SOCKS5 tunnel is consumed once open: `curl --socks5-hostna
 - Verification: call `list-servers`, or `list-ssh-hosts` in fleet mode, then run `execute-command` with `whoami`
 - If sudo was configured, verify it with `execute-command` `id` and `sudo: true`
 
+## Using a configured server
+
+The interview is only half the job. Once the server is running, these are the habits that keep an agent from burning a context window on a machine it has already been told about.
+
+**Read the host facts instead of collecting them.** On every connection the server runs one command that gathers hostname, IP addresses, OS name and version, kernel, uptime, disk, memory and a process count, all probes merged behind markers into a single ssh round trip. The result is cached and returned by `list-servers`:
+
+```
+[connected] prod-1 | deploy@10.0.0.5:22 | hostname=prod-1 | os=Linux | updated=2026-08-19T18:14:23Z
+
+Raw JSON:
+[{"name":"prod-1","connected":true,"guards":"guards=safe ruleset=2026.08.19 ...",
+  "status":{"reachable":true,"osVersion":"Ubuntu 24.04.1 LTS","kernelVersion":"6.8.0-51-generic",
+  "uptime":"12 days","diskSpace":{"free":"9.8G","total":"229.6G"},
+  "memory":{"free":"5.6G","total":"15.5G"},"processes":{"running":214}}}]
+```
+
+So `uname -a`, `df -h`, `free -h`, `uptime` and `hostname -I` are already answered before the first `execute-command`. Call `list-servers` once and read them from there.
+
+**Trust the exit code.** A command that succeeds without printing anything returns `[exit code] 0`, not an empty string. There is no reason to follow `mkdir -p` or `systemctl restart` with `echo $?`.
+
+**Read the failure, do not re-run it.** A non-zero exit comes back with `isError: true` and a JSON body carrying `code`, `message` and `retriable`. The message already holds stderr and `[exit code] N`. Only `retriable: true` is worth a second attempt.
+
+**Refusals are not failures.** `COMMAND_VALIDATION_FAILED` names the rule and the blocked fragment. The forbidden core is not overridable by sudo, by a profile or by a custom ruleset, so rephrasing the command is wasted effort. Report the refusal and ask the user how to proceed.
+
+**The guard profile is visible.** `list-servers` reports `guards=safe ruleset=... allow=N deny=N forbidden=N sudo=allowed upload=allowed` per connection. Read it before planning a chain of commands rather than discovering the limits one refusal at a time.
+
+**Probes obey the guards.** With a whitelist in force, only the allowed probes run, so `status` may be partial. Partial status still means the host is reachable; it is not a connection problem.
+
 ## Cheat sheet
 
 | Scenario | Key flags |

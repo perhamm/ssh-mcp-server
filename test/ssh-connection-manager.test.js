@@ -1146,6 +1146,48 @@ describe('SSH Connection Manager', () => {
       assert.match(seenScript, /cd -- '\/tmp\/work dir' && \{ printf "hello\\nwarning\\n"; \}/);
     });
 
+    it('reports the exit code when a silent command succeeds in shell mode', async () => {
+      const channel = new FakeShellChannel();
+
+      channel.on('write', (payload) => {
+        const readyId = extractMarkerId(payload, '__MCP_READY__');
+        if (readyId) {
+          setImmediate(() => {
+            channel.emit('data', Buffer.from(`__MCP_READY__${readyId}__\n`));
+          });
+          return;
+        }
+
+        const commandId = extractMarkerId(payload, '__MCP_BEGIN__');
+        if (commandId) {
+          setImmediate(() => {
+            channel.emit(
+              'data',
+              Buffer.from(
+                `__MCP_BEGIN__${commandId}__\r\n__MCP_END__${commandId}__RC__0__\r\n`,
+              ),
+            );
+          });
+        }
+      });
+
+      const client = new FakeClient({
+        onConnect: () => setImmediate(() => client.emit('ready')),
+        onShell: ({ callback }) => callback(undefined, channel),
+      });
+
+      manager.createClient = () => client;
+      manager.scheduleStatusCollection = () => {};
+      manager.setConfig({
+        shell: createPasswordConfig({
+          transportMode: 'shell',
+        }),
+      });
+
+      const result = await manager.executeCommand('mkdir -p /tmp/x', undefined, 'shell');
+      assert.strictEqual(result, '[exit code] 0');
+    });
+
     it('strips ANSI sequences and terminal title noise in shell mode', async () => {
       const channel = new FakeShellChannel();
 
@@ -1424,6 +1466,29 @@ describe('SSH Connection Manager', () => {
 
       const result = await manager.executeCommand('cmd', undefined, 'exec');
       assert.strictEqual(result, 'only-stdout');
+    });
+
+    it('reports the exit code when a successful command prints nothing', async () => {
+      const stream = new FakeExecStream();
+      const client = new FakeClient({
+        onConnect: () => setImmediate(() => client.emit('ready')),
+        onExec: ({ callback }) => {
+          callback(undefined, stream);
+          setImmediate(() => {
+            stream.emit('exit', 0);
+            stream.emit('close', 0);
+          });
+        },
+      });
+
+      manager.createClient = () => client;
+      manager.scheduleStatusCollection = () => {};
+      manager.setConfig({
+        exec: createPasswordConfig({ name: 'exec', transportMode: 'exec' }),
+      });
+
+      const result = await manager.executeCommand('mkdir -p /tmp/x', undefined, 'exec');
+      assert.strictEqual(result, '[exit code] 0');
     });
 
     it('truncates the output and aborts the command past maxOutputBytes', async () => {

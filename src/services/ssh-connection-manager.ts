@@ -2448,8 +2448,16 @@ export class SSHConnectionManager {
    * silently loses warnings and progress output written there by tools such as
    * git, docker and npm. With the default `pty: true` the remote end merges
    * stderr into stdout, so `stderr` is empty here and the output is unchanged.
+   *
+   * A silent command reports its exit code instead of an empty string: a model
+   * reads an empty tool result as an unclear outcome and pays for a round of
+   * `echo $?` and `systemctl status` calls to find out what happened.
    */
   private formatCommandSuccess(stdout: string, stderr: string): string {
+    if (!stdout && !stderr) {
+      return "[exit code] 0";
+    }
+
     if (!stderr) {
       return stdout;
     }
@@ -3109,7 +3117,7 @@ export class SSHConnectionManager {
           return;
         }
 
-        finish(undefined, output);
+        finish(undefined, this.formatCommandSuccess(output, ""));
       };
 
       const onData = (chunk: Buffer) => {
