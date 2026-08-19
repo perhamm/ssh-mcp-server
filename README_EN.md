@@ -396,6 +396,8 @@ Host r-ulybka-prod-master
 
 Every next hop connects through the channel of the previous one, exactly as `ssh -J` does. The chain can also be given by hand: `--proxy-jump "bastion,gateway:2222"`. Chain depth is capped at five hops.
 
+The form `ProxyCommand ssh bastion -W %h:%p` is read as the equivalent of `ProxyJump bastion`: that is what ssh expands the short form into, and generated configs carry it far more often. The `-l` and `-p` flags of the hop are honoured and `%r` is substituted with the user of the target. Every other `ProxyCommand` is ignored: the server runs no subprocess of its own.
+
 ### Proxy
 
 ```json

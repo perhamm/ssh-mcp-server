@@ -127,6 +127,122 @@ describe('SSH config hosts', () => {
   });
 });
 
+describe('ProxyCommand', () => {
+  let fixturesDir;
+  let configPath;
+
+  before(() => {
+    fixturesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-proxycommand-test-'));
+    configPath = path.join(fixturesDir, 'config');
+    fs.writeFileSync(configPath, [
+      'Host bastion',
+      '    HostName bastion.example.com',
+      '    User jump',
+      '    Port 2222',
+      '',
+      'Host via-proxy-command',
+      '    HostName 10.20.30.41',
+      '    User ops',
+      '    ProxyCommand ssh bastion -W %h:%p',
+      '',
+      'Host via-proxy-command-same-user',
+      '    HostName 10.20.30.42',
+      '    User ops',
+      '    ProxyCommand ssh bastion -W %h:%p -l %r',
+      '',
+      'Host via-proxy-command-port',
+      '    HostName 10.20.30.43',
+      '    ProxyCommand ssh -q -l jump -p 2022 bastion.example.com -W %h:%p',
+      '',
+      'Host via-proxy-command-quoted',
+      '    HostName 10.20.30.46',
+      '    ProxyCommand "/usr/bin/ssh" bastion -W %h:%p',
+      '',
+      'Host via-unsupported-proxy-command',
+      '    HostName 10.20.30.44',
+      '    ProxyCommand ssh bastion nc %h %p',
+      '',
+      'Host via-netcat-proxy-command',
+      '    HostName 10.20.30.47',
+      '    ProxyCommand nc -X connect -x proxy:3128 %h %p',
+      '',
+      'Host proxy-jump-wins',
+      '    HostName 10.20.30.45',
+      '    ProxyJump bastion',
+      '    ProxyCommand ssh other-hop -W %h:%p',
+    ].join('\n'));
+  });
+
+  after(() => {
+    clearSshConfigCache();
+    fs.rmSync(fixturesDir, { recursive: true, force: true });
+  });
+
+  it('translates the netcat form into a jump hop', () => {
+    assert.strictEqual(
+      lookupSshConfig('via-proxy-command', configPath).proxyJump,
+      'bastion',
+    );
+  });
+
+  it('resolves the translated hop through the config of the hop itself', () => {
+    assert.deepStrictEqual(
+      resolveJumpChain(lookupSshConfig('via-proxy-command', configPath).proxyJump, configPath),
+      [
+        {
+          alias: 'bastion',
+          host: 'bastion.example.com',
+          port: 2222,
+          username: 'jump',
+          identityFile: undefined,
+        },
+      ],
+    );
+  });
+
+  it('substitutes %r with the user of the target', () => {
+    assert.strictEqual(
+      lookupSshConfig('via-proxy-command-same-user', configPath).proxyJump,
+      'ops@bastion',
+    );
+  });
+
+  it('carries the user and the port of the hop', () => {
+    assert.strictEqual(
+      lookupSshConfig('via-proxy-command-port', configPath).proxyJump,
+      'jump@bastion.example.com:2022',
+    );
+  });
+
+  it('accepts a quoted absolute path to ssh', () => {
+    assert.strictEqual(
+      lookupSshConfig('via-proxy-command-quoted', configPath).proxyJump,
+      'bastion',
+    );
+  });
+
+  it('ignores a ProxyCommand that runs something on the hop', () => {
+    assert.strictEqual(
+      lookupSshConfig('via-unsupported-proxy-command', configPath).proxyJump,
+      undefined,
+    );
+  });
+
+  it('ignores a ProxyCommand that is not ssh', () => {
+    assert.strictEqual(
+      lookupSshConfig('via-netcat-proxy-command', configPath).proxyJump,
+      undefined,
+    );
+  });
+
+  it('prefers an explicit ProxyJump over a ProxyCommand', () => {
+    assert.strictEqual(
+      lookupSshConfig('proxy-jump-wins', configPath).proxyJump,
+      'bastion',
+    );
+  });
+});
+
 describe('SSH config caching', () => {
   let fixturesDir;
   let configPath;
