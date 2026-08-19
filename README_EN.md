@@ -5,76 +5,342 @@
 [![CI](https://github.com/perhamm/ssh-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/perhamm/ssh-mcp-server/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/%40perhamm%2Fssh-mcp-server?label=%40perhamm%2Fssh-mcp-server)](https://www.npmjs.com/package/@perhamm/ssh-mcp-server)
 
-SSH-based MCP (Model Context Protocol) server that allows remote execution of SSH commands via the MCP protocol.
+An MCP server on top of SSH: the agent runs commands on remote machines while the keys, the passwords and the sudo password stay on our side.
+
+A fork of [classfang/ssh-mcp-server](https://github.com/classfang/ssh-mcp-server) under ISC.
 
 [Русский](README.md) | English
 
 </div>
 
-## 📝 Project Overview
+## What this is
 
-ssh-mcp-server is a bridging tool that enables AI assistants and other applications supporting the MCP protocol to execute remote SSH commands through a standardized interface. This allows AI assistants to safely operate remote servers, execute commands, and retrieve results without directly exposing SSH credentials to AI models.
+ssh-mcp-server is a bridge between an MCP client (Claude Code, Cursor, Cline) and SSH. The agent calls a tool, the server connects to the machine and returns the output. The model never sees the private key, the password or the sudo password: all of that is read from a local config and from the environment of the server process.
 
-## ✨ Key Features
+One server handles any number of hosts. The host is picked on the fly by its alias in `~/.ssh/config`, so there is no need to spell out every machine in the MCP client config.
 
-- **🔒 Secure Connections**: Supports multiple secure SSH connection methods, including password authentication and private key authentication (with passphrase support)
-- **🛡️ Command Security Control**: Precisely control the range of allowed commands through flexible blacklist and whitelist mechanisms to prevent dangerous operations
-- **🔄 Standardized Interface**: Complies with MCP protocol specifications for seamless integration with AI assistants supporting the protocol
-- **🚇 Dual Transport Modes**: Supports both `exec` and `shell` transport modes for direct SSH hosts and bastion or jump-host scenarios
-- **📂 File Transfer**: Supports bidirectional file transfers, uploading local files to servers or downloading files from servers
-- **🔑 Credential Isolation**: SSH credentials are managed entirely locally and never exposed to AI models, enhancing security
-- **🚀 Ready to Use**: Can be run directly using NPX without global installation, making it convenient and quick to deploy
-- **🗂️ SSH Config Hosts**: One server instance reaches every host alias of `~/.ssh/config`, including `ProxyJump` chains, resolved on first use
-- **⛔ Forbidden Core**: Account changes, cron and systemd persistence, sudoers and SSH configuration edits and mass deletion never run, in any profile, with sudo or over SFTP
-- **🛡️ Guard Profiles**: A versioned, updatable ruleset (`safe`, `readonly`) that inspects every part of a command line before it is sent
-- **🔐 sudo Without Exposing the Password**: The password comes from the server environment, goes to the remote side over stdin and is redacted from the output
-- **🧦 Tunnels**: A SOCKS5 proxy (`ssh -D`) or a single port forward (`ssh -L`) on any local port
-- **🔎 Host Key Verification**: `known_hosts` is checked by default, on the target and on every ProxyJump hop
-- **🔐 Modern Crypto**: Ed25519 first, no SHA-1, CBC or DSA in the negotiated algorithms
-- **📓 Audit Log**: Every call is appended as JSON, with built-in rotation and gzipped archives
-- **🚫 No File Uploads**: `upload` is not published unless asked for; a file the guards cannot read is a way to put code on the host
+## What this fork adds
 
-## 📦 Repository and Credits
+| Feature | Why |
+|---|---|
+| Hosts from `~/.ssh/config` on the fly | One MCP for the whole fleet. The alias goes in `connectionName` and the connection comes up on first use |
+| ProxyJump | A host behind a bastion is reachable by its alias, the `ProxyJump` chain is read from the SSH config |
+| sudo from the environment | The agent asks for `sudo: true`, the server supplies the password and strips it from the output |
+| Forbidden core | A list of operations that never run: not under sudo, not in any profile, not through SFTP |
+| Guard profiles | A ready set of denials in `safe` and a whitelist in `readonly`, versioned and updatable |
+| Tunnels | SOCKS5 (the equivalent of `ssh -D`) and port forwarding (the equivalent of `ssh -L`) on any local port |
+| Host key verification | `known_hosts` is checked by default, a key that is not on the list means the connection is refused |
+| Modern cryptography | Ed25519 first in the list, no SHA-1, no CBC, no DSA |
+| Audit log | Every call is written to JSONL with rotation and gzip archives |
+| No file uploads | `upload` is not published by default: a file the guards cannot read is a way to smuggle code onto the host |
 
-GitHub: [https://github.com/perhamm/ssh-mcp-server](https://github.com/perhamm/ssh-mcp-server)
+## Tools
 
-NPM: [https://www.npmjs.com/package/@perhamm/ssh-mcp-server](https://www.npmjs.com/package/@perhamm/ssh-mcp-server)
+| Tool | What it does |
+|---|---|
+| `execute-command` | Runs a command, supports `sudo` and an arbitrary `connectionName` |
+| `download` | Fetches a file from the server |
+| `list-servers` | Shows the configured connections, their status and the active guard profile |
+| `list-ssh-hosts` | Shows the SSH config aliases available as `connectionName` |
+| `open-tunnel` | Opens a SOCKS5 proxy or a port forward over a connection |
+| `close-tunnel` | Closes a tunnel |
+| `list-tunnels` | Shows the open tunnels and their connection counters |
 
-This project started as a fork of [classfang/ssh-mcp-server](https://github.com/classfang/ssh-mcp-server) by junki.cn and keeps its ISC license. Parts of the guard ruleset follow ideas from [tufantunc/ssh-mcp](https://github.com/tufantunc/ssh-mcp) (MIT).
+`list-ssh-hosts` only appears with `--ssh-config-hosts`, and the tunnel tools are removed by `--disable-tunnels`. There is no `upload` in the list: it is published only with `--enable-upload`.
 
-## 🛠️ Tools List
+## Host facts without extra commands
 
-| Tool | Name | Description |
-|---------|-----------|----------|
-| execute-command | Command Execution Tool | Execute SSH commands on remote servers and get results |
-| download | File Download Tool | Download files from remote servers to local specified locations |
-| list-servers | List Servers Tool | List all available SSH server configurations |
-| list-ssh-hosts | SSH Config Hosts Tool | List the SSH config aliases usable as `connectionName` (needs `--ssh-config-hosts`) |
-| open-tunnel | Tunnel Tool | Open a SOCKS5 proxy or a local port forward through a connection |
-| close-tunnel | Tunnel Tool | Close a tunnel |
-| list-tunnels | Tunnel Tool | List the open tunnels and their stream counters |
+On connect the server takes a snapshot of the machine once: name, addresses, OS, kernel, uptime, disk, memory, process count. All probes are merged behind markers into a single command, so this is one ssh round trip rather than six.
 
-## 📚 Usage
+The server caches the result and returns it from `list-servers`:
 
-### 0. 🤖 Quick Setup via AI Skill (Recommended)
+```
+[connected] prod-1 | deploy@10.0.0.5:22 | hostname=prod-1 | os=Linux | updated=2026-08-19T18:14:23Z
 
-If you are using an AI coding assistant that supports skills (such as Claude Code), you can use the built-in **ssh-mcp-helper** skill to complete the installation and configuration interactively — no need to manually edit JSON files.
+Raw JSON:
+[{"name":"prod-1","connected":true,"guards":"guards=safe ruleset=2026.08.19 ...",
+  "status":{"reachable":true,"osVersion":"Ubuntu 24.04.1 LTS","kernelVersion":"6.8.0-51-generic",
+  "uptime":"12 days","diskSpace":{"free":"9.8G","total":"229.6G"},
+  "memory":{"free":"5.6G","total":"15.5G"},"processes":{"running":214}}}]
+```
 
-**How to use:**
+So `uname -a`, `df -h`, `free -h` and `uptime` are already answered. The agent calls `list-servers` once and reads the status from there.
 
-1. Install the skill from this repository's `skills/` directory
-2. Tell your AI assistant: "Help me set up ssh-mcp-server" or "Configure SSH MCP for my remote server"
-3. The skill will guide you step by step: check Node.js environment → choose MCP client → select authentication method → collect connection parameters → generate and write configuration
+The probes go through the guards one by one. With a whitelist in force only the allowed fields remain in the status. A partial status does not mean the host is unreachable.
 
-The skill supports all scenarios covered below (password, private key, SSH config reuse, SOCKS proxy, bastion hosts, multi-connection, 2FA, command restrictions, etc.) and automatically produces correctly formatted configuration.
+A command that succeeds without printing anything returns `[exit code] 0` instead of an empty string. A model reads an empty result as an unclear outcome and goes back to check with `echo $?`, which costs another round trip and more tokens.
 
----
+## Quick start: one server for the whole fleet
 
-The sections below are arranged from the simplest entry point (username + password) to more advanced scenarios. Pick the case that matches yours and copy the `mcp.json` snippet directly into your MCP client configuration.
+The MCP client config:
 
-> **⚠️ Important**: In MCP configuration files, each command line argument and its value must be separate elements in the `args` array. Do NOT combine them with spaces. For example, use `"--host", "192.168.1.1"` instead of `"--host 192.168.1.1"`.
+```json
+{
+  "mcpServers": {
+    "ssh": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@perhamm/ssh-mcp-server",
+        "--ssh-config-hosts",
+        "--guards-profile", "safe"
+      ],
+      "env": {
+        "SSH_MCP_SUDO_PASSWORD": "..."
+      }
+    }
+  }
+}
+```
 
-### 1. 🔑 Username + Password (simplest)
+From there the agent works like this:
+
+1. Calls `list-ssh-hosts` and finds the alias it needs, say `r-ulybka-prod-master`. The list is truncated for large configs, so the agent passes `filter`: a substring or a pattern such as `r-ulybka-*`.
+2. Calls `execute-command` with `connectionName: "r-ulybka-prod-master"`.
+3. The server reads the alias from `~/.ssh/config`, takes `HostName`, `User`, `Port`, `IdentityFile` and `ProxyJump` from it, brings the connection up and runs the command.
+
+The key never leaves the machine: the server reads the file itself and only the path from the SSH config reaches the conversation. When `IdentityFile` is absent, the ssh-agent from `SSH_AUTH_SOCK` is used. An alias without `HostName` connects by its own name, exactly as `ssh` does.
+
+Only an alias declared by its own `Host` block is reachable. A `Host *` block provides defaults, it does not turn an arbitrary name into a reachable host.
+
+The list of aliases can be narrowed:
+
+```json
+"args": [
+  "-y", "@perhamm/ssh-mcp-server",
+  "--ssh-config-hosts",
+  "--allowed-hosts", "r-ulybka-*,*-stage-*",
+  "--ssh-config-file", "/home/user/.ssh/config_work"
+]
+```
+
+Patterns support `*` and `?`. An alias that matches none of the patterns never gets a connection and the agent receives `SSH_HOST_NOT_ALLOWED`.
+
+## Safe mode and guards
+
+Guards are a versioned ruleset that checks every command before it is sent to the server. The rules live in [`guards/default-guards.json`](guards/default-guards.json) and are updated together with the repository.
+
+### Profiles
+
+| Profile | Behaviour |
+|---|---|
+| `off` | The profile rules are disabled, only the forbidden core applies. This is the default |
+| `safe` | Adds a denial of destructive commands, allows the rest |
+| `readonly` | Allows reads and diagnostics only, inherits every denial of `safe` |
+
+```json
+"args": ["-y", "@perhamm/ssh-mcp-server", "--ssh-config-hosts", "--guards-profile", "safe"]
+```
+
+What `safe` catches beyond the core: `shutdown` and `reboot`, flushing the firewall, stopping sshd and kubelet, `kubectl delete`, `helm uninstall`, `docker system prune`, removing packages, `DROP DATABASE`, `curl | sh`, `git push --force`, truncating logs, unloading kernel modules, interactive editors. The full list with the reasons is in the JSON.
+
+`readonly` additionally requires every part of the command to be on a whitelist: `ls`, `cat`, `grep`, `find`, `ps`, `ss`, `df`, `journalctl`, `systemctl status`, `kubectl get/describe/logs`, `docker ps/logs` and the like. sudo is denied outright in this profile, together with `su`, `doas` and `pkexec`.
+
+### The forbidden core
+
+Some operations never run: not in the `off` profile, not under sudo, not through a custom guards file, not through SFTP behind the back of the command checks. The list lives in the `forbidden` block.
+
+| Category | What is closed |
+|---|---|
+| Accounts | `useradd`, `usermod`, `userdel`, `groupadd`, `passwd`, `chpasswd`, `chage`, `vipw`, and writes to `/etc/passwd`, `/etc/shadow`, `/etc/group` |
+| sudo | Writes to `/etc/sudoers` and `/etc/sudoers.d`, `visudo` |
+| Schedules | `crontab` except `crontab -l`, writes to `/etc/cron*`, `/var/spool/cron`, `/etc/anacrontab`, the `at` and `batch` commands |
+| systemd | Writing units and timers into `/etc/systemd`, `/lib/systemd`, `/usr/lib/systemd`, `systemctl edit`, `systemd-run` |
+| SSH | Editing `/etc/ssh/*`, `~/.ssh/*`, `authorized_keys`, `sshd_config`, and also `ssh-keygen`, `ssh-copy-id`, `ssh-add` |
+| Interpreters | `python`, `perl`, `ruby`, `node`, `php`, `lua`, `Rscript` and running a script from a file: `bash /tmp/x.sh`, `sh -s`, `source`. The guards do not read someone else's code, so this whole route is closed |
+| Mass deletion | `rm -r` of a top level or a system directory, `rm -r` by glob, `find -delete`, deletion through `xargs rm`, the `--no-preserve-root` flag |
+| Disks and secrets | `mkfs`, `wipefs`, `dd of=/dev/`, writes to `/dev/sd*`, a fork bomb, reading `/etc/shadow` and private keys |
+
+Ordinary work still goes through: `crontab -l`, `cat /etc/ssh/sshd_config`, `systemctl restart nginx` and `rm -rf /var/lib/myapp/cache/tmp` all pass. A parseable `bash -c "..."` works too: its contents are checked by the same rules.
+
+The core covers the file tools as well. `download` will not fetch `/etc/shadow` or the contents of `~/.ssh`, and `allowedRemotePaths` cannot allow any of it back. The local side is protected too: `download` will not drop a file into our own `~/.ssh`.
+
+File uploads are off entirely. The `upload` tool is not published until `--enable-upload` is passed, and the `readonly` profile rejects uploads even with that flag.
+
+If the server is needed precisely to create users or edit cron, the core has to be edited in a fork deliberately: there is no flag that lifts it.
+
+### Why a semicolon does not get around it
+
+A command is split on `;`, `|`, `&&`, `||`, `&`, newlines and `$(...)` substitutions, and every part is checked separately. Quoting is honoured while splitting. So `ls; rm -rf /` passes in no profile, even though the whole string starts with an allowed `ls`.
+
+Wrappers are peeled off before the check: `sudo`, `env`, `timeout 5`, `nohup` and assignments such as `LC_ALL=C` do not hide a command from the rules. A script inside `bash -c "..."` is parsed separately and checked by the same rules. Command length is capped at 5000 characters.
+
+Guards cover mistakes made by an agent, not a deliberate bypass. An interpreter carrying arbitrary code, such as `python -c`, is not something the rules can parse. Where a bypass is unacceptable, restrict the rights of the SSH user itself.
+
+### Updating the rules
+
+Three ways to keep the rules current:
+
+1. Merge upstream into your fork. The ruleset file carries a `version` field, and that version shows up in `list-servers` and in the text of every refusal.
+2. Keep your own file and point at it with `--guards-file /etc/ssh-mcp/guards.json`. Its rules are added to the built-in ones and the version becomes `2026.08.19+local-1`.
+3. Refresh the file on a schedule:
+
+```sh
+node scripts/update-guards.js https://example.com/guards.json /etc/ssh-mcp/guards.json
+```
+
+The script validates the JSON and compiles every regular expression before it replaces the file. A broken download does not break a working ruleset.
+
+The format of your own file:
+
+```json
+{
+  "version": "local-1",
+  "profiles": {
+    "safe": {
+      "deny": [
+        { "id": "no-ansible", "pattern": "^ansible-playbook\\b", "reason": "deploys run from CI" }
+      ]
+    }
+  }
+}
+```
+
+A `scope: "command"` field makes a rule check the whole command instead of its parts. That is how the `curl | sh` and SQL rules work. The `forbidden` block of your own file can carry extra denials, but it cannot remove the built-in ones: the lists are merged.
+
+The older `--whitelist` and `--blacklist` are still there and are checked before the guards.
+
+## sudo without the password in the conversation
+
+The sudo password sits in the environment of the server process. The agent passes `sudo: true` and never sees the password itself, neither in the call arguments nor in the output.
+
+```json
+{
+  "mcpServers": {
+    "ssh": {
+      "command": "npx",
+      "args": ["-y", "@perhamm/ssh-mcp-server", "--ssh-config-hosts", "--guards-profile", "safe"],
+      "env": {
+        "SSH_MCP_SUDO_PASSWORD": "..."
+      }
+    }
+  }
+}
+```
+
+The tool call:
+
+```json
+{
+  "tool": "execute-command",
+  "params": {
+    "cmdString": "systemctl restart nginx",
+    "connectionName": "r-ulybka-prod-master",
+    "sudo": true
+  }
+}
+```
+
+The command reaches the server as `sudo -S -k -p '' -u root -- /bin/sh -c '<command>'` and the password is written into the stdin of the channel. It never appears on the command line, so it stays out of `ps` and out of the shell history. The pseudo terminal is disabled for such commands, otherwise the tty would echo the input back into the output. As a safety net the password is stripped from the output and from the text of any error.
+
+The name of the variable and of the target user are set by `--sudo-password-env` and `--sudo-user`. An empty variable fails the call with `SUDO_PASSWORD_MISSING` before the connection is even made. The `readonly` profile forbids sudo entirely.
+
+In `shell` mode the password is written on a separate line right after the command, because sudo reads the same stdin as the shell itself. The `-k` flag guarantees that the password is always asked for and that the line is not executed as a command. For sudo the `exec` mode is the better choice.
+
+## Tunnels
+
+`open-tunnel` opens a local listener and pushes the traffic through the SSH connection. Useful when there is no direct route to the services of a cluster but there is one to a node.
+
+SOCKS5 on port 8777:
+
+```json
+{
+  "tool": "open-tunnel",
+  "params": {
+    "type": "socks5",
+    "localPort": 8777,
+    "connectionName": "r-ulybka-prod-master"
+  }
+}
+```
+
+Any client then goes through the proxy, with names resolved on the remote side:
+
+```sh
+curl --socks5-hostname 127.0.0.1:8777 http://prometheus.monitoring.svc:9090/api/v1/query?query=up
+kubectl --request-timeout=30s ... # through HTTPS_PROXY=socks5h://127.0.0.1:8777
+```
+
+A single port forward, the equivalent of `ssh -L`:
+
+```json
+{
+  "tool": "open-tunnel",
+  "params": {
+    "type": "local",
+    "localPort": 15432,
+    "remoteHost": "pg-master.internal",
+    "remotePort": 5432
+  }
+}
+```
+
+With no `localPort` the system picks the port and returns it in the response. Tunnels live until `close-tunnel`, until the SSH connection drops, or until the server stops.
+
+The limits are set by flags:
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--tunnel-bind-address` | `127.0.0.1` | The address the tunnels listen on |
+| `--allowed-tunnel-ports` | no limit | The list of ports that may be taken |
+| `--max-tunnels` | 8 | How many tunnels are held at once |
+| `--disable-tunnels` | off | Removes the tunnel tools from the list |
+
+The listener binds to loopback by default. An address wider than loopback opens the proxy into your network, so change it deliberately.
+
+## Host key verification
+
+The server key is checked against `known_hosts` on every connection, including the intermediate hosts of a `ProxyJump` chain. The default mode is `strict`: a host missing from `known_hosts` means a refusal.
+
+| Mode | Behaviour |
+|---|---|
+| `strict` | The default. We connect only to hosts listed in `known_hosts` |
+| `accept-new` | An unknown host is recorded on first connect, a key mismatch is still a refusal |
+| `off` | No verification, the upstream behaviour |
+
+`~/.ssh/known_hosts`, `~/.ssh/known_hosts2` and `/etc/ssh/ssh_known_hosts` are consulted, and for an alias carrying `UserKnownHostsFile` the file named in the SSH config. A custom list is given by `--known-hosts-file`. Hashed entries, patterns, the `[host]:port` form and the `@revoked` marker are all understood.
+
+The refusal arrives as `SSH_HOST_KEY_REJECTED` with the fingerprint in the text:
+
+```text
+Host key of prod.example.com is not in known_hosts (~/.ssh/known_hosts): ssh-ed25519 SHA256:xxxx.
+Verify that fingerprint, add the host to known_hosts, or start the server with --host-key-checking accept-new.
+```
+
+A key mismatch is never accepted, in any mode: the server refuses to connect and says that the host was either rebuilt or someone is sitting in the middle.
+
+For the first pass over a fleet it is convenient to run once with `--host-key-checking accept-new` and then go back to `strict`.
+
+## Audit log
+
+Every call is written as a JSON line: the command, the connection, the sudo flag, the guard verdict, the duration, the size of the output. The output itself never reaches the log and the sudo password is stripped.
+
+```json
+{"time":"2026-08-19T08:12:44.101Z","pid":8123,"event":"command","result":"blocked","connection":"r-ulybka-prod-master","command":"useradd deploy","sudo":true,"code":"COMMAND_VALIDATION_FAILED","reason":"Blocked by the forbidden core ..."}
+{"time":"2026-08-19T08:12:51.880Z","pid":8123,"event":"command","result":"ok","connection":"r-ulybka-prod-master","command":"systemctl status nginx","sudo":false,"durationMs":412,"bytes":1840}
+```
+
+The events written are `connect`, `command`, `download`, `upload`, `tunnel-open`, `tunnel-close` and `host-key`.
+
+By default the file lives in `$XDG_STATE_HOME/ssh-mcp-server/audit.jsonl`, which usually means `~/.local/state/ssh-mcp-server/audit.jsonl`, with mode `0600`.
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--audit-log <path>` | the XDG state directory | The path to the log, the value `off` disables writing |
+| `--audit-max-size <bytes>` | 10485760 | The size at which the file is rotated. `0` disables the built-in rotation |
+| `--audit-keep <count>` | 10 | How many gzip archives are kept |
+
+Rotation is built in: once the limit is reached the current file moves to `audit.jsonl.1.gz`, the older archives shift along, and everything beyond `--audit-keep` is removed. Ten archives of 10 MiB each is on the order of a hundred megabytes uncompressed and noticeably less after gzip.
+
+If logrotate already manages the logs, set `--audit-max-size 0` and configure rotation in `copytruncate` mode.
+
+A write failure does not fail the command: the server reports it to stderr once and keeps working.
+
+## Ways to connect
+
+The scenarios below go from simple to complex. In `args` every flag and its value are two separate elements of the array: `"--host", "192.168.1.1"`, not `"--host 192.168.1.1"`.
+
+### Login and password
 
 ```json
 {
@@ -94,290 +360,81 @@ The sections below are arranged from the simplest entry point (username + passwo
 }
 ```
 
-### 2. 🔐 Username + Private Key
+### Private key
 
 ```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "192.168.1.1",
-        "--port", "22",
-        "--username", "root",
-        "--privateKey", "~/.ssh/id_rsa"
-      ]
-    }
-  }
-}
+"args": [
+  "-y", "@perhamm/ssh-mcp-server",
+  "--host", "192.168.1.1",
+  "--username", "root",
+  "--privateKey", "~/.ssh/id_rsa",
+  "--passphrase", "pwd123456"
+]
 ```
 
-### 3. 🔏 Private Key with Passphrase
+The passphrase can stay out of the config and live in `SSH_MCP_PASSPHRASE` instead.
+
+### A single alias from `~/.ssh/config`
 
 ```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "192.168.1.1",
-        "--port", "22",
-        "--username", "root",
-        "--privateKey", "~/.ssh/id_rsa",
-        "--passphrase", "pwd123456"
-      ]
-    }
-  }
-}
+"args": ["-y", "@perhamm/ssh-mcp-server", "--host", "myserver"]
 ```
 
-### 4. 📋 Reuse `~/.ssh/config`
+The server reads `HostName`, `Port`, `User`, `IdentityFile` and `ProxyJump` from the `Host myserver` block, including `Include` directives and patterns. Command line flags win: `--port 2222` overrides the port from the config.
 
-If you already have a host alias in `~/.ssh/config`, the server reads connection parameters directly from it — no need to repeat them in `mcp.json`.
+### Bastion and ProxyJump
+
+When an alias carries `ProxyJump`, the chain comes up on its own:
+
+```
+Host r-ulybka-prod-master
+    HostName 10.20.30.40
+    User ops
+    ProxyJump bastion
+    IdentityFile ~/.ssh/prod_key
+```
+
+Every next hop connects through the channel of the previous one, exactly as `ssh -J` does. The chain can also be given by hand: `--proxy-jump "bastion,gateway:2222"`. Chain depth is capped at five hops.
+
+### Proxy
 
 ```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "myserver"
-      ]
-    }
-  }
-}
+"args": [
+  "-y", "@perhamm/ssh-mcp-server",
+  "--host", "192.168.1.1",
+  "--username", "root",
+  "--password", "pwd123456",
+  "--proxy", "socks5://user:pwd@proxy-host:1080"
+]
 ```
 
-Assuming your `~/.ssh/config` contains:
+`socks://`, `socks5://`, `http://` and `https://` are supported. HTTP and HTTPS go through the `CONNECT` method with Basic authentication, on the default ports 80 and 443. For SOCKS5 the port is mandatory. `--proxy` and `--proxy-jump` are not used together.
 
-```
-Host myserver
-    HostName 192.168.1.1
-    Port 22
-    User root
-    IdentityFile ~/.ssh/id_rsa
-```
+### A jump host with an interactive shell
 
-You can also specify a custom SSH config file path:
+`transportMode` is `exec` by default. Switch to `shell` when commands do not run after a successful login, or when the appliance only offers an interactive session:
 
 ```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "myserver",
-        "--ssh-config-file", "/path/to/custom/ssh_config"
-      ]
-    }
-  }
-}
+"args": [
+  "-y", "@perhamm/ssh-mcp-server",
+  "--host", "bastion.example.com",
+  "--username", "ops",
+  "--password", "pwd123456",
+  "--transport-mode", "shell",
+  "--shell-ready-timeout", "15000"
+]
 ```
 
-**Note**: Command-line parameters take precedence over SSH config values. For example, if you specify `--port 2222`, it will override the port from SSH config.
+In `shell` mode commands run one after another through a single persistent session, and `upload` and `download` do not work: SFTP is disabled there.
 
-### 5. 🌐 Connecting Through a Proxy
+### Two-factor authentication
 
-When the target host is only reachable through a proxy, use `--proxy` with a SOCKS5, HTTP, or HTTPS proxy.
+The `--try-keyboard` flag enables keyboard-interactive. The password and the key are supplied automatically, and the second factor code is read from `SSH_MCP_2FA_CODE`.
 
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "192.168.1.1",
-        "--port", "22",
-        "--username", "root",
-        "--password", "pwd123456",
-        "--proxy", "http://username:password@proxy-host:proxy-port"
-      ]
-    }
-  }
-}
-```
+### Several connections in one server
 
-Supported URL formats:
+Besides the SSH config aliases the older approach remains: a file describing the connections.
 
-```text
-socks://username:password@proxy-host:1080
-socks5://username:password@proxy-host:1080
-http://username:password@proxy-host:8080
-https://username:password@proxy-host:8443
-```
-
-HTTP and HTTPS proxies use the `CONNECT` method to tunnel to the SSH server, with optional Basic proxy authentication. HTTP and HTTPS default to ports `80` and `443`; SOCKS5 requires an explicit port. HTTPS proxy certificates are verified using the default Node.js trust store.
-
-The existing `socksProxy` configuration and `--socksProxy` option remain supported for backward compatibility, but only accept `socks://` and `socks5://`. Do not configure both `proxy` and `socksProxy`.
-
-### 6. 📝 Restricting Commands With Whitelist / Blacklist
-
-Use `--whitelist` and `--blacklist` to limit which commands the server is allowed to run. Patterns are comma-separated regular expressions. **Strongly recommended** for any production use.
-
-Whitelist example (only allow read-only inspection commands):
-
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "192.168.1.1",
-        "--port", "22",
-        "--username", "root",
-        "--password", "pwd123456",
-        "--whitelist", "^ls( .*)?,^cat .*,^df.*"
-      ]
-    }
-  }
-}
-```
-
-Blacklist example (block destructive commands):
-
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "192.168.1.1",
-        "--port", "22",
-        "--username", "root",
-        "--password", "pwd123456",
-        "--blacklist", "^rm .*,^shutdown.*,^reboot.*"
-      ]
-    }
-  }
-}
-```
-
-> Note: If both whitelist and blacklist are specified, the command must pass both checks (whitelist first, then blacklist) to be executed.
-
-### 7. 🧩 Wrapping Commands With a Template
-
-`commandTemplate` wraps every executed command in a template — useful for switching user via `su`, running inside a container, or jumping through another host. Use `<quotedCommand>` when the command is passed as a shell argument, or `<command>` for raw insertion. The template is applied **after** the working-directory `cd` is prepended, so the entire `cd ... && <actual command>` chain gets wrapped.
-
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "10.0.0.1",
-        "--port", "22",
-        "--username", "deploy",
-        "--password", "xxx",
-        "--command-template", "su root -c <quotedCommand>"
-      ]
-    }
-  }
-}
-```
-
-Executing `ls /app` with directory `/data` actually sends:
-
-```
-su root -c 'cd -- '\''/data'\'' && ls /app'
-```
-
-Other useful templates:
-
-```text
-sudo bash -c <quotedCommand>
-docker exec -i mycontainer sh -c <quotedCommand>
-ssh jumphost <quotedCommand>
-```
-
-### 8. 🚇 Bastion / Jump Host (`transportMode: shell`)
-
-`transportMode` defaults to `exec`. Switch to `shell` when:
-
-- SSH login succeeds but `exec` command execution fails
-- The remote side requires shell startup scripts, banners, or environment initialization first
-- The target effectively exposes only an interactive shell (bastion hosts, jump hosts, network devices)
-
-Behavior differences:
-
-- `exec`: supports `execute-command`, `upload`, and `download`
-- `shell`: runs commands through a persistent shell session with an internal command queue, but does **not** support `upload` / `download` because SFTP is unavailable in this mode
-
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "bastion.example.com",
-        "--port", "22",
-        "--username", "ops",
-        "--password", "pwd123456",
-        "--transport-mode", "shell",
-        "--shell-ready-timeout", "15000"
-      ]
-    }
-  }
-}
-```
-
-In JSON config files you can also set `shellCommandTimeoutMs` to override the default per-command timeout for shell-backed connections.
-
-### 9. 🔐 Multi-Factor Authentication (2FA / MFA)
-
-When the SSH server requires multi-factor authentication (password + private key + 2FA verification code), enable `tryKeyboard`. The password and private key are auto-supplied. For non-password prompts, set `SSH_MCP_2FA_CODE` in the server environment before connecting.
-
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--host", "example.com",
-        "--port", "22",
-        "--username", "user",
-        "--password", "your_password",
-        "--privateKey", "/path/to/key",
-        "--try-keyboard"
-      ]
-    }
-  }
-}
-```
-
-**Authentication flow:**
-1. Private key authentication (if provided)
-2. Password authentication (if provided)
-3. Keyboard-interactive for 2FA code via `SSH_MCP_2FA_CODE`
-
-### 10. 🧩 Managing Multiple SSH Connections
-
-When you need to expose more than one SSH target through the same MCP server, register them under unique connection names and select the target at call time via `connectionName`. There are three ways to configure them:
-
-#### 📄 Method 1: Using Config File (Recommended)
-
-Create a JSON configuration file (e.g., `ssh-config.json`):
-
-**Array Format:**
 ```json
 [
   {
@@ -385,453 +442,142 @@ Create a JSON configuration file (e.g., `ssh-config.json`):
     "host": "1.2.3.4",
     "port": 22,
     "username": "alice",
-    "password": "{abc=P100s0}",
-    "socksProxy": "socks://127.0.0.1:10808",
-    "commandTimeoutMs": 120000,
-    "maxOutputBytes": 10485760
-  },
-  {
-    "name": "bastion",
-    "host": "9.9.9.9",
-    "port": 22,
-    "username": "ops",
-    "password": "pwd123456",
-    "transportMode": "shell",
-    "shellReadyTimeoutMs": 15000,
-    "shellCommandTimeoutMs": 45000,
-    "connectionTimeoutMs": 30000,
-    "keepaliveIntervalMs": 10000,
-    "keepaliveCountMax": 3
+    "privateKey": "~/.ssh/dev_key",
+    "guardProfile": "safe",
+    "commandTimeoutMs": 120000
   },
   {
     "name": "prod",
     "host": "5.6.7.8",
     "port": 22,
     "username": "bob",
-    "password": "yyy",
-    "socksProxy": "socks://127.0.0.1:10808"
-  },
-  {
-    "name": "secure-server",
-    "host": "secure.example.com",
-    "port": 22,
-    "username": "admin",
-    "password": "your_password",
-    "privateKey": "/path/to/private/key",
-    "tryKeyboard": true
+    "privateKey": "~/.ssh/prod_key",
+    "guardProfile": "readonly",
+    "allowedRemotePaths": ["/var/log", "/tmp"]
   }
 ]
 ```
 
-**Object Format:**
 ```json
-{
-  "dev": {
-    "host": "1.2.3.4",
-    "port": 22,
-    "username": "alice",
-    "password": "{abc=P100s0}",
-    "socksProxy": "socks://127.0.0.1:10808",
-    "commandTimeoutMs": 120000,
-    "maxOutputBytes": 10485760
-  },
-  "bastion": {
-    "host": "9.9.9.9",
-    "port": 22,
-    "username": "ops",
-    "password": "pwd123456",
-    "transportMode": "shell",
-    "shellReadyTimeoutMs": 15000,
-    "shellCommandTimeoutMs": 45000
-  },
-  "prod": {
-    "host": "5.6.7.8",
-    "port": 22,
-    "username": "bob",
-    "password": "yyy",
-    "socksProxy": "socks://127.0.0.1:10808"
-  }
-}
+"args": ["-y", "@perhamm/ssh-mcp-server", "--config-file", "/abs/path/ssh-config.json"]
 ```
 
-Then use the `--config-file` parameter:
+The object form, where the key is the connection name, is supported as well. The connection is picked by `connectionName`, and without it the first one is used.
+
+## Command and path restrictions
+
+### Whitelist and blacklist
 
 ```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--config-file", "ssh-config.json"
-      ]
-    }
-  }
-}
+"args": [
+  "-y", "@perhamm/ssh-mcp-server",
+  "--host", "192.168.1.1",
+  "--username", "root",
+  "--privateKey", "~/.ssh/id_rsa",
+  "--whitelist", "^ls( .*)?,^cat .*,^df.*",
+  "--blacklist", "^rm .*,^shutdown.*"
+]
 ```
 
-#### 🔧 Method 2: Using JSON Format with --ssh Parameter
+The patterns are comma separated regular expressions. A command is checked against the whitelist first, then the blacklist, then the guard profile, and it has to pass all three.
 
-You can pass JSON-formatted configuration strings directly:
+### Command template
 
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--ssh", "{\"name\":\"dev\",\"host\":\"1.2.3.4\",\"port\":22,\"username\":\"alice\",\"password\":\"{abc=P100s0}\",\"socksProxy\":\"socks://127.0.0.1:10808\"}",
-        "--ssh", "{\"name\":\"bastion\",\"host\":\"9.9.9.9\",\"port\":22,\"username\":\"ops\",\"password\":\"pwd123456\",\"transportMode\":\"shell\",\"shellReadyTimeoutMs\":15000}",
-        "--ssh", "{\"name\":\"prod\",\"host\":\"5.6.7.8\",\"port\":22,\"username\":\"bob\",\"password\":\"yyy\",\"socksProxy\":\"socks://127.0.0.1:10808\"}"
-      ]
-    }
-  }
-}
+`--command-template` wraps every command. `<quotedCommand>` inserts the command as an escaped argument, `<command>` inserts it verbatim. The template is applied after the working directory is substituted.
+
+```
+su root -c <quotedCommand>
+docker exec -i mycontainer sh -c <quotedCommand>
 ```
 
-#### 📝 Method 3: Legacy Comma-Separated Format (Backward Compatible)
+### Paths for file operations
 
-For simple cases without special characters in passwords, you can still use the legacy format:
+`--allowed-local-paths` extends the list of local directories available to `upload` and `download` (by default only the current directory). `--allowed-remote-paths` restricts the remote paths and takes comma separated absolute POSIX paths. Without that flag SFTP sees the whole filesystem of the host, which the server warns about at startup.
 
-```bash
-npx @perhamm/ssh-mcp-server \
-  --ssh "name=dev,host=1.2.3.4,port=22,user=alice,password=xxx" \
-  --ssh "name=prod,host=5.6.7.8,port=22,user=bob,password=yyy"
+## Timeouts and the output limit
+
+| Setting | Default | What it limits |
+|---|---|---|
+| `timeout` in the tool call | none | A single command, overrides the connection settings |
+| `commandTimeoutMs` | 30000 | A command in `exec` mode |
+| `shellCommandTimeoutMs` | 30000 | A command in `shell` mode |
+| `connectionTimeoutMs` | 30000 | Establishing the connection and the handshake |
+| `sftpTimeoutMs` | 300000 | SFTP operations |
+| `maxOutputBytes` | 10485760 | The captured output of one command |
+| `keepaliveIntervalMs` | 10000 | The keepalive interval |
+
+Past the output limit the command is aborted and the tool returns `OUTPUT_LIMIT_EXCEEDED` together with the piece already collected. Errors arrive as a structure of `code`, `message` and `retriable`.
+
+## Command line flags
+
+```text
+  --config-file <path>             File describing the connections
+  --ssh-config-file <path>         Path to the SSH config (defaults to ~/.ssh/config)
+  --ssh <config>                   A connection as JSON or as key=value pairs
+  -h, --host <host>                Host or SSH config alias
+  -p, --port <port>                Port
+  -u, --username <name>            User
+  -w, --password <password>        Password
+  -k, --privateKey <path>          Path to the private key
+  -P, --passphrase <passphrase>    Passphrase of the key
+  -a, --agent <path>               ssh-agent socket
+  -W, --whitelist <patterns>       Command whitelist, comma separated
+  -B, --blacklist <patterns>       Command blacklist, comma separated
+  --proxy <url>                    SOCKS5, HTTP or HTTPS proxy
+  -s, --socksProxy <url>           Legacy flag, SOCKS5 only
+  --allowed-local-paths <paths>    Local directories for upload and download
+  --allowed-remote-paths <paths>   Remote directories for SFTP
+  --transport-mode <mode>          exec or shell (defaults to exec)
+  --shell-ready-timeout <ms>       Shell readiness timeout (defaults to 10000)
+  --command-template <template>    Template carrying <command> or <quotedCommand>
+  --pty                            Pseudo terminal for exec (on by default)
+  --try-keyboard                   Keyboard-interactive for 2FA
+  --pre-connect                    Connect to every host at startup
+  --ssh-config-hosts               Allow SSH config hosts on the fly
+  --allowed-hosts <patterns>       Patterns of allowed aliases, comma separated
+  --proxy-jump <chain>             ProxyJump chain, comma separated
+  --guards-profile <name>          off, safe or readonly (defaults to off)
+  --guards-file <path>             A custom ruleset on top of the built-in one
+  --sudo-password-env <var>        The variable holding the sudo password
+  --sudo-user <user>               The user for sudo (defaults to root)
+  --host-key-checking <mode>       strict, accept-new or off (defaults to strict)
+  --known-hosts-file <paths>       Custom known_hosts files, comma separated
+  --host-key-algorithms <list>     Host key algorithms, comma separated
+  --enable-upload                  Publish the upload tool (off by default)
+  --audit-log <path|off>           Path to the audit log (defaults to the XDG state directory)
+  --audit-max-size <bytes>         Rotation threshold, 0 disables it (defaults to 10485760)
+  --audit-keep <count>             How many archives to keep (defaults to 10)
+  --disable-tunnels                Remove the tunnel tools
+  --tunnel-bind-address <addr>     Address for the tunnels (defaults to 127.0.0.1)
+  --allowed-tunnel-ports <ports>   Allowed tunnel ports, comma separated
+  --max-tunnels <count>            Limit of simultaneous tunnels (defaults to 8)
+  --version, -v                    Package version
+  --help                           This help message
 ```
 
-> **⚠️ Note**: The legacy format may have issues with passwords containing special characters like `=`, `,`, `{`, `}`. Use Method 1 or Method 2 for passwords with special characters.
+## Security
 
-In MCP tool calls, specify the connection name via the `connectionName` parameter. If omitted, the default connection is used.
+- For production turn on `--guards-profile safe`, and `readonly` fits an on-call incident review. With `off` only the forbidden core is left: everything else runs, which the server warns about in the log.
+- The key, its passphrase and the sudo password are read from files and from the environment. The MCP client config holds the path to the key, not the key itself.
+- Tunnels listen on loopback. SOCKS5 has no authentication, so a proxy on `0.0.0.0` opens the internal network to anyone who can reach the port, and the server warns about it at startup.
+- Without `--allowed-remote-paths` SFTP can read and write any path on the host, `~/.ssh/authorized_keys` included.
+- The host key is checked against `known_hosts` in `strict` mode. Turning the check off with `--host-key-checking off` is a lab-only move.
+- There is no rate limiting.
 
-Example (execute command on 'prod' connection):
-
-```json
-{
-  "tool": "execute-command",
-  "params": {
-    "cmdString": "ls -al",
-    "connectionName": "prod"
-  }
-}
-```
-
-Example (execute command with timeout options):
-
-```json
-{
-  "tool": "execute-command",
-  "params": {
-    "cmdString": "ping -c 10 127.0.0.1",
-    "connectionName": "prod",
-    "timeout": 5000
-  }
-}
-```
-
-### 11. 🗂️ One Server for Every Host of `~/.ssh/config`
-
-With `--ssh-config-hosts` the server stops needing a host up front. Any alias of the SSH config becomes a `connectionName`, and the connection is established the first time a tool uses it.
-
-```json
-{
-  "mcpServers": {
-    "ssh": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@perhamm/ssh-mcp-server",
-        "--ssh-config-hosts",
-        "--allowed-hosts", "prod-*,stage-*",
-        "--guards-profile", "safe"
-      ],
-      "env": {
-        "SSH_MCP_SUDO_PASSWORD": "..."
-      }
-    }
-  }
-}
-```
-
-The agent calls `list-ssh-hosts` (with a `filter` such as `prod-*` when the config is large; the listing is capped at 100 entries), picks an alias and passes it as `connectionName`. `HostName`, `Port`, `User`, `IdentityFile` and `ProxyJump` come from the SSH config; the key file is read by the server, so only its path ever exists in the conversation. Without an `IdentityFile` the agent socket from `SSH_AUTH_SOCK` is used, and an alias without a `HostName` is connected to by its own name, the way `ssh` does it. Only an alias declared by its own `Host` block is reachable: a `Host *` block provides defaults, it does not turn an arbitrary name into a host.
-
-`--allowed-hosts` restricts which aliases may be reached (`*` and `?` globs). An alias outside the list is refused with `SSH_HOST_NOT_ALLOWED`.
-
-A `ProxyJump` in the SSH config is followed automatically: each hop is connected through the channel of the previous one, the way `ssh -J` does it, up to five hops. `--proxy-jump "bastion,gateway:2222"` sets the same thing from the command line. `--proxy` and `--proxy-jump` cannot be combined.
-
-### 12. 🛡️ Guard Profiles
-
-Guards are a versioned ruleset, shipped in [`guards/default-guards.json`](guards/default-guards.json), that inspects every command before it leaves the server.
-
-| Profile | Behaviour |
-|---|---|
-| `off` | Profile rules disabled, the forbidden core still applies. The default |
-| `safe` | Adds the destructive-command rules, allows everything else |
-| `readonly` | Allows read-only diagnostics only, inherits every deny rule of `safe` |
-
-Part of the ruleset is a **forbidden core** that no profile, no `sudo: true` and no local ruleset can lift, and that covers SFTP as well:
-
-| Category | What is closed |
-|---|---|
-| Interpreters | `python`, `perl`, `ruby`, `node`, `php`, `lua`, `Rscript`, and running a script by file: `bash /tmp/x.sh`, `sh -s`, `source`. An inline `bash -c "..."` still works, because its contents are parsed and checked |
-| Accounts | `useradd`, `usermod`, `userdel`, `groupadd`, `passwd`, `chpasswd`, `chage`, `vipw`, and writes to `/etc/passwd`, `/etc/shadow`, `/etc/group` |
-| sudo policy | Writes to `/etc/sudoers` and `/etc/sudoers.d`, `visudo` |
-| Scheduling | `crontab` except `crontab -l`, writes to `/etc/cron*`, `/var/spool/cron`, `/etc/anacrontab`, the `at` and `batch` commands |
-| systemd | Unit and timer writes under `/etc/systemd`, `/lib/systemd`, `/usr/lib/systemd`, `systemctl edit`, `systemd-run` |
-| SSH | Edits of `/etc/ssh/*`, `~/.ssh/*`, `authorized_keys`, `sshd_config`, plus `ssh-keygen`, `ssh-copy-id`, `ssh-add` |
-| Mass deletion | `rm -r` of a top-level or system directory, `rm -r` driven by a wildcard, `find -delete`, deletion through `xargs rm`, `--no-preserve-root` |
-| Disks and secrets | `mkfs`, `wipefs`, `dd of=/dev/`, writes to `/dev/sd*`, fork bombs, reads of `/etc/shadow` and private keys |
-
-Ordinary work is untouched: `crontab -l`, `cat /etc/ssh/sshd_config`, `systemctl restart nginx` and `rm -rf /var/lib/myapp/cache/tmp` all pass. `download` refuses to fetch `/etc/shadow` or anything under `~/.ssh`, whatever `allowedRemotePaths` says, and the local side is covered too, so a download cannot land in your own `~/.ssh`. Uploading is off entirely: the `upload` tool is only published with `--enable-upload`, and the `readonly` profile refuses it even then. There is no flag that turns the core off; a server that is meant to create users or edit crontabs has to have the core edited in the fork on purpose.
-
-```json
-"args": ["-y", "@perhamm/ssh-mcp-server", "--ssh-config-hosts", "--guards-profile", "safe"]
-```
-
-On top of the core, `safe` blocks `shutdown` and `reboot`, firewall flushes, stopping sshd or kubelet, `kubectl delete`, `helm uninstall`, `docker system prune`, package removal, `DROP DATABASE`, `curl | sh`, `git push --force`, log destruction, kernel module changes and interactive editors. `readonly` additionally requires every part of the command to be on an allow list, and blocks `sudo`, `su`, `doas` and `pkexec` outright.
-
-The command line is split on `;`, `|`, `&&`, `||`, `&`, newlines and `$(...)` substitutions, honouring quotes, and every part is checked on its own, so `ls; rm -rf /` is refused although the line starts with an allowed `ls`. Wrappers (`sudo`, `env`, `timeout 5`, `LC_ALL=C`) are stripped before matching, the script inside `bash -c "..."` is parsed and checked by the same rules, and a command is capped at 5000 characters.
-
-Guards catch agent mistakes rather than a determined bypass: an interpreter carrying arbitrary code, such as `python -c`, is beyond what rules can read. Where a bypass is unacceptable, restrict the rights of the SSH user itself.
-
-Keeping the rules current:
-
-1. Merge upstream into your fork. The ruleset carries a `version` that is reported by `list-servers` and in every refusal.
-2. Keep your own file and point `--guards-file /etc/ssh-mcp/guards.json` at it. Its rules are added to the bundled ones and the version becomes `2026.08.19+local-1`.
-3. Refresh that file from cron: `node scripts/update-guards.js https://example.com/guards.json /etc/ssh-mcp/guards.json`. The download is parsed and every pattern compiled before the file is replaced, so a broken fetch leaves the working ruleset in place.
-
-```json
-{
-  "version": "local-1",
-  "profiles": {
-    "safe": {
-      "deny": [
-        { "id": "no-ansible", "pattern": "^ansible-playbook\\b", "reason": "deploys are done from CI" }
-      ]
-    }
-  }
-}
-```
-
-`scope: "command"` makes a rule match the whole command instead of each part. A local file may add rules to the `forbidden` block, but it cannot remove the bundled ones: the lists are concatenated. `--whitelist` and `--blacklist` still work and are checked before the guards.
-
-### 13. 🔐 sudo Without Exposing the Password
-
-The sudo password lives in the environment of the server process. The agent asks for elevation with `sudo: true` and never sees the password, neither in the call nor in the output.
-
-```json
-{
-  "tool": "execute-command",
-  "params": {
-    "cmdString": "systemctl restart nginx",
-    "connectionName": "prod-master",
-    "sudo": true
-  }
-}
-```
-
-The command is sent as `sudo -S -k -p '' -u root -- /bin/sh -c '<command>'` and the password is written to the channel's stdin, so it stays out of the command line, out of `ps` and out of the shell history. The pseudo-tty is switched off for those commands, because a tty would echo the password back into the captured output, and the password is redacted from output and error messages anyway.
-
-`--sudo-password-env` changes the variable name (default `SSH_MCP_SUDO_PASSWORD`), `--sudo-user` the target user (default `root`). An empty variable fails the call with `SUDO_PASSWORD_MISSING` before any connection is made, and the `readonly` profile refuses sudo entirely.
-
-In `shell` mode the password is sent as the line right after the command, since sudo reads the same stdin the shell reads its script from; `-k` guarantees the prompt, so the line is always consumed by sudo. `exec` mode is the better transport for sudo.
-
-### 14. 🧦 Tunnels
-
-`open-tunnel` binds a local listener and carries its traffic through the SSH connection, which is how services that are only reachable from the target host become reachable locally.
-
-```json
-{
-  "tool": "open-tunnel",
-  "params": { "type": "socks5", "localPort": 8777, "connectionName": "prod-master" }
-}
-```
+## Development
 
 ```sh
-curl --socks5-hostname 127.0.0.1:8777 http://prometheus.monitoring.svc:9090/api/v1/query?query=up
+npm install
+npm run build
+npm test
 ```
 
-Names are resolved on the remote side, so hosts that only exist in the cluster's DNS work. A single port forward is the other type:
+The tests run on the built-in Node.js runner and live in [`test/`](test/).
 
-```json
-{
-  "tool": "open-tunnel",
-  "params": { "type": "local", "localPort": 15432, "remoteHost": "pg-master.internal", "remotePort": 5432 }
-}
-```
+## Upstream and licence
 
-Without `localPort` the OS picks a free port and the answer reports it. Tunnels live until `close-tunnel`, until the SSH connection drops or until the server stops.
+The project grew out of [classfang/ssh-mcp-server](https://github.com/classfang/ssh-mcp-server) by junki.cn, licensed ISC. The upstream copyright is kept in [LICENSE](LICENSE) along with a link to the original repository.
 
-| Flag | Default | Effect |
-|---|---|---|
-| `--tunnel-bind-address` | `127.0.0.1` | Address the listeners bind to |
-| `--allowed-tunnel-ports` | unrestricted | Ports that may be bound |
-| `--max-tunnels` | 8 | How many tunnels can be open at once |
-| `--disable-tunnels` | off | Removes the tunnel tools |
+The guard ruleset is partly built on ideas from [tufantunc/ssh-mcp](https://github.com/tufantunc/ssh-mcp) (MIT).
 
-Listeners bind to loopback by default. Any wider address exposes the proxy to your network, so change it deliberately.
-
-### 15. 🔎 Host Key Verification
-
-The host key is checked against `known_hosts` on every connection, jump hops included. The default mode is `strict`: a host that is not in `known_hosts` is refused.
-
-| Mode | Behaviour |
-|---|---|
-| `strict` | The default. Only hosts recorded in `known_hosts` are reachable |
-| `accept-new` | An unknown host is recorded on first sight; a key that contradicts the record is still refused |
-| `off` | No verification, the upstream behaviour |
-
-`~/.ssh/known_hosts`, `~/.ssh/known_hosts2` and `/etc/ssh/ssh_known_hosts` are read, or the `UserKnownHostsFile` of the alias when the SSH config names one. `--known-hosts-file` sets the list explicitly. Hashed entries, patterns, the `[host]:port` form and the `@revoked` marker are all understood.
-
-A refusal comes back as `SSH_HOST_KEY_REJECTED` with the fingerprint to compare:
-
-```text
-Host key of prod.example.com is not in known_hosts (~/.ssh/known_hosts): ssh-ed25519 SHA256:xxxx.
-Verify that fingerprint, add the host to known_hosts, or start the server with --host-key-checking accept-new.
-```
-
-A key that contradicts `known_hosts` is refused in every mode, including `accept-new`. For onboarding a fleet, run once with `--host-key-checking accept-new` and go back to `strict` afterwards.
-
-### 16. 📓 Audit Log
-
-Every call is appended as one JSON line: the command, the connection, the sudo flag, the guard verdict, the duration and the size of the output. The output itself is never logged and the sudo password is redacted.
-
-```json
-{"time":"2026-08-19T08:12:44.101Z","pid":8123,"event":"command","result":"blocked","connection":"prod-master","command":"useradd deploy","sudo":true,"code":"COMMAND_VALIDATION_FAILED"}
-{"time":"2026-08-19T08:12:51.880Z","pid":8123,"event":"command","result":"ok","connection":"prod-master","command":"systemctl status nginx","durationMs":412,"bytes":1840}
-```
-
-The events are `connect`, `command`, `download`, `upload`, `tunnel-open`, `tunnel-close` and `host-key`. The default path is `$XDG_STATE_HOME/ssh-mcp-server/audit.jsonl` (usually `~/.local/state/ssh-mcp-server/audit.jsonl`), mode `0600`.
-
-| Flag | Default | Effect |
-|---|---|---|
-| `--audit-log <path>` | XDG state directory | Log path; `off` disables logging |
-| `--audit-max-size <bytes>` | 10485760 | Rotate at this size; `0` disables the built-in rotation |
-| `--audit-keep <count>` | 10 | How many gzipped archives to keep |
-
-Rotation is built in: at the limit the current file becomes `audit.jsonl.1.gz`, older archives shift up and anything past `--audit-keep` is deleted. If logrotate already owns the file, pass `--audit-max-size 0` and rotate it with `copytruncate`. A write failure never fails the command; the server reports it once on stderr.
-
-### 17. 🔐 Negotiated Algorithms
-
-The defaults put Ed25519 first and drop everything that rests on SHA-1, CBC or DSA:
-
-- host keys: `ssh-ed25519`, `ecdsa-sha2-nistp256/384/521`, `rsa-sha2-512`, `rsa-sha2-256`
-- kex: `curve25519-sha256` first, no `diffie-hellman-group1-sha1` or `-sha1` variants
-- ciphers: `chacha20-poly1305`, AES-GCM, AES-CTR; no CBC, no 3DES
-- MACs: the ETM SHA-2 family; no `hmac-sha1`, no `hmac-md5`
-
-`--host-key-algorithms ssh-ed25519` pins the host key list to Ed25519 alone. The `algorithms` object of a connection config still replaces whatever categories it names.
-
-### ⏱️ Command Execution Timeout
-
-The `execute-command` tool supports timeout options to prevent commands from hanging indefinitely:
-
-- **timeout**: Per-call command execution timeout in milliseconds (optional); when provided, it overrides the connection setting, otherwise the connection setting or its 30000ms default is used
-- Set `commandTimeoutMs` per connection in the JSON config file to change that default, so callers do not have to pass `timeout` on every call (`exec` mode)
-- The `shell` mode equivalent is `shellCommandTimeoutMs`
-- A `timeout` passed with the call always takes precedence over both settings
-- Connections use SSH keepalives by default (`keepaliveIntervalMs`: 10000, `keepaliveCountMax`: 3) and respect `connectionTimeoutMs` for connection setup
-- SFTP open and transfer operations respect `sftpTimeoutMs` (default 300000ms)
-- Error responses include stable `code`, `message`, and `retriable` fields for easier agent-side handling
-
-This is particularly useful for commands like `ping`, `tail -f`, or other long-running processes that might block execution.
-
-### 📦 Command Output Limit
-
-The combined captured `stdout` and `stderr` for each command is limited to protect the MCP server from large files or unbounded output:
-
-- Set `maxOutputBytes` in a JSON connection configuration; the default is `10485760` bytes (10 MiB)
-- `maxOutputBytes` must be a non-negative integer; `0` disables the limit, which is not recommended for untrusted commands
-- When output exceeds the limit, the remote command is aborted and the tool returns an `OUTPUT_LIMIT_EXCEEDED` error with the captured, truncated output instead of reporting success
-- With `pty: false`, warnings and progress written to `stderr` by successful commands are preserved in a `[stderr]` section
-- The limit applies to both `exec` and `shell` mode. `exec` mode closes just that command's channel, whereas the `shell` channel is shared by every command on the connection and the remote keeps writing after an abort, so the connection is dropped instead — the same way a shell mode command timeout behaves
-
-### 🗂️ List All SSH Servers
-
-You can use the MCP tool `list-servers` to get all available SSH server configurations:
-
-Example call:
-
-```json
-{
-  "tool": "list-servers",
-  "params": {}
-}
-```
-
-Example response:
-
-```json
-[
-  { "name": "dev", "host": "1.2.3.4", "port": 22, "username": "alice" },
-  { "name": "prod", "host": "5.6.7.8", "port": 22, "username": "bob" }
-]
-```
-
-### ⚙️ Command Line Options Reference
-
-```text
-Options:
-  --config-file       JSON configuration file path (recommended for multiple servers)
-  --ssh-config-file   SSH config file path (default: ~/.ssh/config)
-  --ssh               SSH connection configuration (can be JSON string or legacy format)
-  -h, --host          SSH server host address or alias from SSH config
-  -p, --port          SSH server port
-  -u, --username      SSH username
-  -w, --password      SSH password
-  -k, --privateKey    SSH private key file path
-  -P, --passphrase    Private key passphrase (if any)
-  -a, --agent         SSH agent socket path
-  --try-keyboard      Enable keyboard-interactive authentication for 2FA/MFA (default: false)
-  -W, --whitelist     Command whitelist, comma-separated regular expressions
-  -B, --blacklist     Command blacklist, comma-separated regular expressions
-  --proxy             Proxy URL supporting SOCKS5, HTTP, and HTTPS
-  -s, --socksProxy    Legacy SOCKS5 proxy URL
-  --allowed-local-paths   Additional allowed local paths for upload/download, comma-separated
-  --allowed-remote-paths  Allowed remote (POSIX, absolute) paths for SFTP upload/download, comma-separated
-  --transport-mode    SSH transport mode: exec or shell (default: exec)
-  --shell-ready-timeout   Shell readiness probe timeout in milliseconds (default: 10000)
-  --command-template  Command template, use <quotedCommand> for shell arguments or <command> for raw insertion
-  --pty               Allocate pseudo-tty for command execution (default: true)
-  --pre-connect       Pre-connect to all configured SSH servers on startup
-  --ssh-config-hosts  Let tools connect to any host alias of the SSH config on demand
-  --allowed-hosts     Host alias globs that may be used, comma-separated
-  --proxy-jump        ProxyJump chain, comma-separated [user@]host[:port]
-  --guards-profile    Built-in command guards: off, safe or readonly (default: off)
-  --guards-file       Extra guard ruleset merged on top of the bundled one
-  --sudo-password-env Env var holding the sudo password (default: SSH_MCP_SUDO_PASSWORD)
-  --sudo-user         Target user for sudo (default: root)
-  --host-key-checking known_hosts verification: strict, accept-new or off (default: strict)
-  --known-hosts-file  known_hosts files to check, comma-separated
-  --enable-upload     Expose the upload tool (off by default)
-  --audit-log         Audit log path, 'off' disables (default: XDG state dir)
-  --audit-max-size    Rotate the audit log at this size, 0 disables rotation (default: 10485760)
-  --audit-keep        Gzipped audit archives to keep (default: 10)
-  --host-key-algorithms   Accepted host key algorithms, comma-separated
-  --disable-tunnels   Do not expose the tunnel tools
-  --tunnel-bind-address   Address tunnels listen on (default: 127.0.0.1)
-  --allowed-tunnel-ports  Tunnel ports that may be bound, comma-separated
-  --max-tunnels       Maximum number of open tunnels (default: 8)
-  --version, -v       Print package version
-  --help              Print this help message
-```
-
-## 🛡️ Security Considerations
-
-This server provides powerful capabilities to execute commands and transfer files on remote servers. To ensure it is used securely, please consider the following:
-
-- **Command Whitelisting**: It is *strongly recommended* to use the `--whitelist` option to restrict the set of commands that can be executed. Without a whitelist, any command can be executed on the remote server, which can be a significant security risk.
-- **Private Key Security**: The server reads the SSH private key into memory. Ensure that the machine running the `ssh-mcp-server` is secure. Do not expose the server to untrusted networks.
-- **Denial of Service (DoS)**: The server does not have built-in rate limiting. An attacker could potentially launch a DoS attack by flooding the server with connection requests or large file transfers. It is recommended to run the server behind a firewall or reverse proxy with rate-limiting capabilities.
-- **Path Traversal**: The server has built-in protection against path traversal attacks on the local filesystem. However, it is still important to be mindful of the paths used in `upload` and `download` commands.
-- **Local Transfer Scope**: By default, local file transfers are restricted to the current working directory. Use `--allowed-local-paths` or `allowedLocalPaths` in config only for explicitly trusted directories.
-- **Uploads**: Off by default. Turning them on with `--enable-upload` gives the agent a way to place a file the guards cannot read and then run it, so keep `allowedRemotePaths` tight if you do.
-- **Audit Log**: On by default. It records commands verbatim, so a command that carries a secret in its arguments carries it into the log as well.
-- **Guard Profiles**: `--guards-profile safe` is the baseline for production work, `readonly` for incident triage. With `off` only the forbidden core is left, everything else runs and the server logs a warning.
-- **Host Keys**: Verified against `known_hosts` in `strict` mode by default. `--host-key-checking off` is a lab setting, not a production one.
-- **Tunnels**: Listeners bind to loopback. The SOCKS5 proxy has no authentication, so a listener bound to `0.0.0.0` hands your internal network to anyone who can reach the port; the server logs a warning when that is configured.
-- **Remote Transfer Scope**: SFTP upload/download accepts only absolute POSIX paths. If `allowedRemotePaths` (or `--allowed-remote-paths`) is not configured, any remote path is accepted and the server prints a startup warning. Configure `allowedRemotePaths` to whitelist a small set of remote directories; this is strongly recommended to prevent prompt-injection-driven reads or writes of files like `~/.ssh/authorized_keys` or `/etc/sshd_config`.
-
-
+The package on NPM: [@perhamm/ssh-mcp-server](https://www.npmjs.com/package/@perhamm/ssh-mcp-server).
