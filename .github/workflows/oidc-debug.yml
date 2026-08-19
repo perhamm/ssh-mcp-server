@@ -1,0 +1,35 @@
+name: OIDC debug
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Report the toolchain before the upgrade
+        run: |
+          echo "node $(node -v)"
+          echo "npm $(npm -v) at $(which npm)"
+
+      - run: npm install -g npm@latest
+
+      - name: Report the toolchain after the upgrade
+        run: |
+          echo "node $(node -v)"
+          echo "npm $(npm -v) at $(which npm)"
+          echo "id-token url set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "id-token token set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
+          echo "npmrc files:"
+          ls -la ~/.npmrc "$NPM_CONFIG_USERCONFIG" 2>&1 || true
+          echo "registry: $(npm config get registry)"
