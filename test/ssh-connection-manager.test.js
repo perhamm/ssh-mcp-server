@@ -245,8 +245,8 @@ describe('SSH Connection Manager', () => {
     manager.scheduleStatusCollection = originalScheduleStatusCollection;
   });
 
-  describe('配置管理', () => {
-    it('应该正确初始化并设置配置', () => {
+  describe('config management', () => {
+    it('initialises and stores the config', () => {
       const configs = {
         dev: createPasswordConfig({ name: 'dev' }),
       };
@@ -257,7 +257,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(config.username, 'devuser');
     });
 
-    it('应该能够获取所有服务器信息', () => {
+    it('returns the info of every server', () => {
       const configs = {
         dev: createPasswordConfig({ name: 'dev' }),
         prod: createPasswordConfig({
@@ -276,7 +276,7 @@ describe('SSH Connection Manager', () => {
       assert.ok(allInfos.find((c) => c.name === 'prod'));
     });
 
-    it('应该能够通过名称获取配置', () => {
+    it('returns a config by name', () => {
       manager.setConfig({
         dev: createPasswordConfig({ name: 'dev' }),
       });
@@ -286,14 +286,14 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(config.host, '192.168.1.100');
     });
 
-    it('获取不存在的配置应抛出错误', () => {
+    it('throws when the requested config does not exist', () => {
       manager.setConfig({});
       assert.throws(() => {
         manager.getConfig('nonexistent');
       }, /not set/);
     });
 
-    it('无效的命令正则应在配置阶段抛出错误', () => {
+    it('throws at config time on an invalid command regexp', () => {
       assert.throws(() => {
         manager.setConfig({
           dev: createPasswordConfig({
@@ -305,8 +305,8 @@ describe('SSH Connection Manager', () => {
     });
   });
 
-  describe('服务器信息', () => {
-    it('初始状态应该是未连接', () => {
+  describe('server info', () => {
+    it('starts out disconnected', () => {
       manager.setConfig({
         dev: createPasswordConfig({ name: 'dev' }),
       });
@@ -318,7 +318,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(devInfo.connected, false);
     });
 
-    it('服务器信息应包含正确的连接参数', () => {
+    it('reports the connection parameters', () => {
       manager.setConfig({
         dev: createPasswordConfig({
           name: 'dev',
@@ -334,7 +334,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(devInfo.username, 'devuser');
     });
 
-    it('应允许配置的本地路径用于传输', () => {
+    it('allows the configured local paths for transfers', () => {
       const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-allowed-'));
 
       try {
@@ -356,7 +356,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('本地允许路径应按连接隔离', () => {
+    it('keeps the allowed local paths per connection', () => {
       const firstRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-first-'));
       const secondRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-second-'));
 
@@ -384,8 +384,9 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    // 调用方看不到 MCP server 的工作目录，只说“必须在工作目录内”等于没给出可纠正的信息。
-    it('本地路径被拒时应指出解析结果和允许的根路径', () => {
+    // The caller cannot see the working directory of the MCP server, so "must be inside the
+    // working directory" alone gives them nothing to act on.
+    it('names the resolved path and the allowed roots when a local path is rejected', () => {
       const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-allowed-'));
 
       try {
@@ -412,7 +413,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('本地路径校验应拒绝通过符号链接逃出允许目录', (t) => {
+    it('rejects a local path that escapes the allowed directory through a symlink', (t) => {
       const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-allowed-'));
       const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-outside-'));
       const outsideFile = path.join(outsideRoot, 'secret.txt');
@@ -449,7 +450,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('未配置 allowedRemotePaths 时 validateRemotePath 放行绝对路径', () => {
+    it('lets validateRemotePath pass any absolute path when allowedRemotePaths is unset', () => {
       manager.setConfig({
         dev: createPasswordConfig({ name: 'dev' }),
       });
@@ -457,7 +458,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(manager.validateRemotePath('/tmp/a.txt', 'dev'), '/tmp/a.txt');
     });
 
-    it('validateRemotePath 拒绝相对路径', () => {
+    it('makes validateRemotePath reject a relative path', () => {
       manager.setConfig({
         dev: createPasswordConfig({ name: 'dev' }),
       });
@@ -468,7 +469,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('validateRemotePath 拒绝空串与 null byte', () => {
+    it('makes validateRemotePath reject an empty string and a null byte', () => {
       manager.setConfig({
         dev: createPasswordConfig({ name: 'dev' }),
       });
@@ -483,7 +484,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('配置 allowedRemotePaths 后只允许前缀匹配的路径', () => {
+    it('allows only prefix matching paths once allowedRemotePaths is set', () => {
       manager.setConfig({
         dev: createPasswordConfig({
           name: 'dev',
@@ -510,7 +511,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('远端路径被拒时应指出解析结果和允许的根路径', () => {
+    it('names the resolved path and the allowed roots when a remote path is rejected', () => {
       manager.setConfig({
         dev: createPasswordConfig({
           name: 'dev',
@@ -533,7 +534,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('validateRemotePath 归一化 .. 并据此做边界判断', () => {
+    it('makes validateRemotePath normalise .. before checking the boundary', () => {
       manager.setConfig({
         dev: createPasswordConfig({
           name: 'dev',
@@ -548,8 +549,8 @@ describe('SSH Connection Manager', () => {
     });
   });
 
-  describe('默认连接名称', () => {
-    it('应该使用第一个配置作为默认名称', () => {
+  describe('the default connection name', () => {
+    it('takes the first config as the default', () => {
       manager.setConfig({
         first: createPasswordConfig({ name: 'first', host: '1.1.1.1', username: 'user1', password: 'pass1' }),
         second: createPasswordConfig({ name: 'second', host: '2.2.2.2', username: 'user2', password: 'pass2' }),
@@ -559,7 +560,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(config.host, '1.1.1.1');
     });
 
-    it('应该支持指定默认连接名称', () => {
+    it('supports an explicit default connection name', () => {
       manager.setConfig(
         {
           first: createPasswordConfig({ name: 'first', host: '1.1.1.1', username: 'user1', password: 'pass1' }),
@@ -573,8 +574,8 @@ describe('SSH Connection Manager', () => {
     });
   });
 
-  describe('安全边界', () => {
-    it('状态采集命令不应绕过命令白名单', async () => {
+  describe('security boundaries', () => {
+    it('keeps the status collection command inside the command whitelist', async () => {
       const originalRunCommandInternal = manager.runCommandInternal;
       const seenCalls = [];
 
@@ -615,7 +616,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(manager.statusCache.get('dev').reachable, true);
     });
 
-    it('SOCKS 代理应传递认证信息并脱敏日志', async () => {
+    it('passes the credentials to a SOCKS proxy and redacts them in the log', async () => {
       const originalCreateConnection = SocksClient.createConnection;
       const originalLog = Logger.log;
       const logs = [];
@@ -652,7 +653,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('HTTP 代理应通过 CONNECT 建立隧道并传递 Basic 认证', async () => {
+    it('tunnels through an HTTP proxy with CONNECT and Basic auth', async () => {
       const originalRequest = http.request;
       const originalLog = Logger.log;
       const logs = [];
@@ -701,7 +702,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('HTTPS 代理应使用 TLS 代理连接和默认端口 443', async () => {
+    it('connects to an HTTPS proxy over TLS on the default port 443', async () => {
       const originalRequest = https.request;
       let proxyRequest;
 
@@ -727,7 +728,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('HTTP 代理 CONNECT 非 200 响应应关闭 socket 并返回连接错误', async () => {
+    it('closes the socket and reports a connection error when HTTP CONNECT does not return 200', async () => {
       const originalRequest = http.request;
       let proxyRequest;
 
@@ -755,7 +756,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('不支持的代理协议应返回明确错误', async () => {
+    it('reports a clear error on an unsupported proxy protocol', async () => {
       await assert.rejects(
         manager.buildClientConfig(
           'invalid-proxy',
@@ -770,7 +771,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('旧 socksProxy 配置应拒绝 HTTP 和 HTTPS URL', async () => {
+    it('makes the legacy socksProxy option reject HTTP and HTTPS URLs', async () => {
       await assert.rejects(
         manager.buildClientConfig(
           'legacy-http-proxy',
@@ -785,7 +786,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('proxy 和 socksProxy 同时配置时应拒绝连接', async () => {
+    it('refuses to connect when both proxy and socksProxy are set', async () => {
       await assert.rejects(
         manager.buildClientConfig(
           'conflicting-proxy',
@@ -801,7 +802,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('connectAll 应尝试所有连接后再汇总失败', async () => {
+    it('makes connectAll try every connection before reporting the failures', async () => {
       const originalConnect = manager.connect;
       const attempted = [];
 
@@ -828,7 +829,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('连接配置默认启用超时和 keepalive', async () => {
+    it('enables the timeout and keepalive by default', async () => {
       const sshConfig = await manager.buildClientConfig(
         'dev',
         createPasswordConfig({ name: 'dev' }),
@@ -840,7 +841,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(sshConfig.keepaliveCountMax, 3);
     });
 
-    it('连接配置允许覆盖超时和 keepalive', async () => {
+    it('allows the timeout and keepalive to be overridden', async () => {
       const sshConfig = await manager.buildClientConfig(
         'dev',
         createPasswordConfig({
@@ -857,7 +858,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(sshConfig.keepaliveCountMax, 2);
     });
 
-    it('自定义 SSH algorithms 覆盖对应类别，其余类别保留安全默认值', async () => {
+    it('lets custom SSH algorithms override their own category and keeps the safe defaults for the rest', async () => {
       const algorithms = {
         serverHostKey: { append: ['ssh-rsa'] },
         hmac: ['hmac-sha1', 'hmac-md5'],
@@ -873,7 +874,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(sshConfig.algorithms.cipher.includes('3des-cbc'), false);
     });
 
-    it('默认协商算法以 ed25519 优先且不含 SHA-1 与 CBC', async () => {
+    it('prefers ed25519 in the default negotiation and offers neither SHA-1 nor CBC', async () => {
       const sshConfig = await manager.buildClientConfig(
         'dev',
         createPasswordConfig({ name: 'dev' }),
@@ -892,7 +893,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('hostKeyAlgorithms 可以钉死主机密钥算法', async () => {
+    it('lets hostKeyAlgorithms pin the host key algorithms', async () => {
       const sshConfig = await manager.buildClientConfig(
         'dev',
         createPasswordConfig({ name: 'dev', hostKeyAlgorithms: ['ssh-ed25519'] }),
@@ -901,7 +902,7 @@ describe('SSH Connection Manager', () => {
       assert.deepStrictEqual(sshConfig.algorithms.serverHostKey, ['ssh-ed25519']);
     });
 
-    it('tryKeyboard authHandler 应在认证方法耗尽时返回 false', async () => {
+    it('makes the tryKeyboard authHandler return false once the auth methods are exhausted', async () => {
       const sshConfig = await manager.buildClientConfig(
         'dev',
         createPasswordConfig({
@@ -918,7 +919,7 @@ describe('SSH Connection Manager', () => {
       assert.deepStrictEqual(attempts, ['password', 'keyboard-interactive', false]);
     });
 
-    it('tryKeyboard authHandler 应区分 agent 与 publickey', async () => {
+    it('makes the tryKeyboard authHandler tell agent and publickey apart', async () => {
       const sshConfig = await manager.buildClientConfig(
         'agent',
         createPasswordConfig({
@@ -936,7 +937,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(sshConfig.agent, '/tmp/ssh-agent.sock');
     });
 
-    it('tryKeyboard authHandler 应在 publickey 仍可用时继续尝试 agent', async () => {
+    it('makes the tryKeyboard authHandler keep trying the agent while publickey is still offered', async () => {
       const sshConfig = await manager.buildClientConfig(
         'mixed',
         createPasswordConfig({
@@ -955,7 +956,7 @@ describe('SSH Connection Manager', () => {
       assert.deepStrictEqual(attempts, ['publickey', 'agent']);
     });
 
-    it('keyboard prompt 有验证码时应优先响应非密码提示', async () => {
+    it('answers the non-password prompt first when the keyboard prompt asks for a one time code', async () => {
       const originalOtp = process.env.SSH_MCP_2FA_CODE;
       process.env.SSH_MCP_2FA_CODE = '654321';
 
@@ -983,7 +984,7 @@ describe('SSH Connection Manager', () => {
       }
     });
 
-    it('keyboard prompt 无验证码时应将单个 non-echo 提示回退为密码', async () => {
+    it('treats a single non-echo prompt as the password when there is no one time code', async () => {
       const originalOtp = process.env.SSH_MCP_2FA_CODE;
       delete process.env.SSH_MCP_2FA_CODE;
 
@@ -1011,7 +1012,7 @@ describe('SSH Connection Manager', () => {
   });
 
   describe('Shell transport', () => {
-    it('shell 模式连接初始化会进入 ready 流程', async () => {
+    it('runs the ready sequence when a shell mode connection starts', async () => {
       const channel = new FakeShellChannel();
       channel.on('write', (payload) => {
         const readyId = extractMarkerId(payload, '__MCP_READY__');
@@ -1044,7 +1045,7 @@ describe('SSH Connection Manager', () => {
       assert.ok(channel.writes.some((payload) => payload.includes('__MCP_READY__')));
     });
 
-    it('shell 模式命令按队列串行执行', async () => {
+    it('runs shell mode commands one after another through the queue', async () => {
       const channel = new FakeShellChannel();
       const commandIds = [];
 
@@ -1094,7 +1095,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(await secondPromise, 'second');
     });
 
-    it('shell 模式能正确提取 marker 间的输出', async () => {
+    it('extracts the output between the markers in shell mode', async () => {
       const channel = new FakeShellChannel();
       let seenScript = '';
 
@@ -1145,7 +1146,7 @@ describe('SSH Connection Manager', () => {
       assert.match(seenScript, /cd -- '\/tmp\/work dir' && \{ printf "hello\\nwarning\\n"; \}/);
     });
 
-    it('shell 模式会清理 ANSI 和终端标题噪音', async () => {
+    it('strips ANSI sequences and terminal title noise in shell mode', async () => {
       const channel = new FakeShellChannel();
 
       channel.on('write', (payload) => {
@@ -1187,7 +1188,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'hello\nworld');
     });
 
-    it('shell 模式会剥离开头残留的 BEGIN marker', async () => {
+    it('strips a leftover BEGIN marker from the start of the output in shell mode', async () => {
       const channel = new FakeShellChannel();
 
       channel.on('write', (payload) => {
@@ -1229,7 +1230,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'hello');
     });
 
-    it('shell 模式能正确识别非零退出码', async () => {
+    it('picks up a non-zero exit code in shell mode', async () => {
       const channel = new FakeShellChannel();
 
       channel.on('write', (payload) => {
@@ -1272,7 +1273,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('shell 模式超时会返回固定错误', async () => {
+    it('returns a fixed error when a shell mode command times out', async () => {
       const channel = new FakeShellChannel();
 
       channel.on('write', (payload) => {
@@ -1313,7 +1314,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(manager.getAllServerInfos()[0].connected, false);
     });
 
-    it('shell 模式下 upload/download 返回 UNSUPPORTED_IN_SHELL_MODE', async () => {
+    it('returns UNSUPPORTED_IN_SHELL_MODE for upload and download in shell mode', async () => {
       manager.setConfig({
         shell: createPasswordConfig({
           transportMode: 'shell',
@@ -1341,7 +1342,7 @@ describe('SSH Connection Manager', () => {
   });
 
   describe('Exec transport regression', () => {
-    it('exec 模式原有行为不变', async () => {
+    it('keeps the behaviour of exec mode unchanged', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1372,7 +1373,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(client.execCalls.length, 1);
     });
 
-    it('命令成功时保留 stderr 而不是丢弃', async () => {
+    it('keeps stderr on a successful command instead of dropping it', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1401,7 +1402,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'out-line\n[stderr]\nwarn-line');
     });
 
-    it('命令成功且无 stderr 时输出保持原样', async () => {
+    it('leaves the output untouched when a command succeeds without stderr', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1425,7 +1426,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'only-stdout');
     });
 
-    it('输出超过 maxOutputBytes 时截断并中止命令', async () => {
+    it('truncates the output and aborts the command past maxOutputBytes', async () => {
       const stream = new FakeExecStream();
       let closeCalls = 0;
       stream.close = function close() {
@@ -1469,7 +1470,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(closeCalls, 1);
     });
 
-    it('maxOutputBytes 为 0 时不限制输出', async () => {
+    it('does not limit the output when maxOutputBytes is 0', async () => {
       const stream = new FakeExecStream();
       const payload = 'x'.repeat(4096);
       const client = new FakeClient({
@@ -1498,7 +1499,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, payload);
     });
 
-    it('exec channel 打不开时会按命令超时失效连接', async () => {
+    it('invalidates the connection on the command timeout when the exec channel never opens', async () => {
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
         onExec: () => {
@@ -1529,7 +1530,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(client.endCalls, 1);
     });
 
-    it('exec 模式使用配置的 commandTimeoutMs 作为默认超时', async () => {
+    it('uses the configured commandTimeoutMs as the default timeout in exec mode', async () => {
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
         onExec: () => {
@@ -1549,7 +1550,7 @@ describe('SSH Connection Manager', () => {
 
       const startedAt = Date.now();
       await assert.rejects(
-        // 不传 timeout：默认值必须来自配置，而不是写死的 30000
+        // With no timeout given the default has to come from the config, not from a hardcoded 30000.
         () => manager.executeCommand('pwd', undefined, 'exec'),
         (error) => {
           assert.strictEqual(error.code, 'COMMAND_TIMEOUT');
@@ -1560,7 +1561,7 @@ describe('SSH Connection Manager', () => {
       assert.ok(Date.now() - startedAt < 5000);
     });
 
-    it('调用参数里的 timeout 仍然覆盖 commandTimeoutMs', async () => {
+    it('lets the timeout of the call override commandTimeoutMs', async () => {
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
         onExec: () => {},
@@ -1585,7 +1586,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('SFTP open 卡住时会按 sftpTimeoutMs 失效连接', async () => {
+    it('invalidates the connection on sftpTimeoutMs when SFTP open hangs', async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-test-'));
       const localFile = path.join(tempDir, 'upload.txt');
       fs.writeFileSync(localFile, 'data');
@@ -1622,7 +1623,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(client.endCalls, 1);
     });
 
-    it('SFTP upload 传输超时时保留 OPERATION_TIMEOUT 错误码', async () => {
+    it('keeps the OPERATION_TIMEOUT code when an SFTP upload times out', async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-mcp-test-'));
       const localFile = path.join(tempDir, 'upload.txt');
       fs.writeFileSync(localFile, 'data');
@@ -1665,7 +1666,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(client.endCalls, 1);
     });
 
-    it('exec 模式应用 commandTemplate 包裹命令', async () => {
+    it('wraps the command with commandTemplate in exec mode', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1697,7 +1698,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'file.txt');
     });
 
-    it('commandTemplate 会安全包裹含单引号的工作目录', async () => {
+    it('makes commandTemplate quote a working directory containing a single quote', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1729,7 +1730,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'done');
     });
 
-    it('exec 模式无 directory 时 commandTemplate 仅包裹原始命令', async () => {
+    it('makes commandTemplate wrap the bare command when exec mode gets no directory', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1758,7 +1759,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'root');
     });
 
-    it('commandTemplate 不解释 $& 等 replace 特殊序列', async () => {
+    it('keeps commandTemplate from interpreting $& and the other replace sequences', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1787,7 +1788,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'ok');
     });
 
-    it('directory 中的命令替换字符不会被 shell 展开', async () => {
+    it('keeps command substitution characters in the directory from being expanded by the shell', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1818,7 +1819,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(result, 'done');
     });
 
-    it('directory 中的单引号会被正确转义', async () => {
+    it('escapes a single quote in the directory', async () => {
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1850,7 +1851,7 @@ describe('SSH Connection Manager', () => {
     });
   });
 
-  describe('输出解码与上限', () => {
+  describe('output decoding and limits', () => {
     // Emit `payload` in fixed-size byte slices so multi-byte characters and
     // markers are split across chunk boundaries.
     function emitInByteSlices(emit, payload, sliceSize) {
@@ -1885,8 +1886,8 @@ describe('SSH Connection Manager', () => {
       return client;
     }
 
-    it('exec 模式跨块的多字节字符不会损坏', async () => {
-      const text = '中文输出测试内容';
+    it('keeps multibyte characters intact across chunks in exec mode', async () => {
+      const text = 'многобайтовый вывод команды';
       const stream = new FakeExecStream();
       const client = new FakeClient({
         onConnect: () => setImmediate(() => client.emit('ready')),
@@ -1911,13 +1912,13 @@ describe('SSH Connection Manager', () => {
       });
 
       assert.strictEqual(
-        await manager.executeCommand('cat zh.txt', undefined, 'exec'),
+        await manager.executeCommand('cat utf8.txt', undefined, 'exec'),
         text,
       );
     });
 
-    it('shell 模式跨块的多字节字符与 marker 都能正确还原', async () => {
-      const text = '中文输出测试内容';
+    it('restores both the multibyte characters and the markers across chunks in shell mode', async () => {
+      const text = 'многобайтовый вывод команды';
       const channel = new FakeShellChannel();
       let commandId;
       channel.on('write', (payload) => {
@@ -1925,10 +1926,10 @@ describe('SSH Connection Manager', () => {
       });
 
       await connectShell(channel);
-      const pending = manager.executeCommand('cat zh.txt', undefined, 'shell');
+      const pending = manager.executeCommand('cat utf8.txt', undefined, 'shell');
       await delay(0);
 
-      // 5 字节一片：既切断多字节字符，也切断 marker 本身
+      // Five bytes per slice cuts through both the multibyte characters and the markers.
       emitInByteSlices(
         (slice) => channel.emit('data', slice),
         `__MCP_BEGIN__${commandId}__\r\n${text}\n__MCP_END__${commandId}__RC__0__\r\n`,
@@ -1938,7 +1939,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(await pending, text);
     });
 
-    it('shell 模式 marker 逐字节到达仍能识别', async () => {
+    it('recognises a marker that arrives one byte at a time in shell mode', async () => {
       const channel = new FakeShellChannel();
       let commandId;
       channel.on('write', (payload) => {
@@ -1958,7 +1959,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(await pending, 'hi');
     });
 
-    it('shell 模式退出码晚于 marker 前缀到达仍能识别', async () => {
+    it('recognises an exit code that arrives after the marker prefix in shell mode', async () => {
       const channel = new FakeShellChannel();
       let commandId;
       channel.on('write', (payload) => {
@@ -1983,7 +1984,7 @@ describe('SSH Connection Manager', () => {
       });
     });
 
-    it('shell 模式超出 maxOutputBytes 会中止命令并失效连接', async () => {
+    it('aborts the command and invalidates the connection past maxOutputBytes in shell mode', async () => {
       const channel = new FakeShellChannel();
       let commandId;
       channel.on('write', (payload) => {
@@ -2008,7 +2009,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(client.endCalls, 1);
     });
 
-    it('shell 模式只统计 marker 之间的命令输出字节', async () => {
+    it('counts only the command output between the markers in shell mode', async () => {
       const channel = new FakeShellChannel();
       let commandId;
       channel.on('write', (payload) => {
@@ -2031,7 +2032,7 @@ describe('SSH Connection Manager', () => {
     });
   });
 
-  describe('SFTP 并发传输', () => {
+  describe('concurrent SFTP transfers', () => {
     const FAST_MIN_BYTES = 256 * 1024;
 
     function setupTransfer(sftp) {
@@ -2054,7 +2055,7 @@ describe('SSH Connection Manager', () => {
       return tempDir;
     }
 
-    it('小文件上传仍走顺序流，不触发 fastPut', async () => {
+    it('uploads a small file over a sequential stream without fastPut', async () => {
       const sftp = new FakeTransferSftp({ statSizes: [0] });
       const tempDir = setupTransfer(sftp);
       const localFile = path.join(tempDir, 'small.bin');
@@ -2070,7 +2071,7 @@ describe('SSH Connection Manager', () => {
       );
     });
 
-    it('大文件上传使用 fastPut 并发传输', async () => {
+    it('uploads a large file concurrently with fastPut', async () => {
       const sftp = new FakeTransferSftp({ statSizes: [FAST_MIN_BYTES] });
       const tempDir = setupTransfer(sftp);
       const localFile = path.join(tempDir, 'big.bin');
@@ -2087,7 +2088,7 @@ describe('SSH Connection Manager', () => {
     // fastGet plans its chunks from the reported size and treats 0 as "nothing
     // to transfer" while still reporting success, so /proc-style pseudo files
     // must never reach it.
-    it('远端 size 为 0 的伪文件走顺序流并拿到真实内容', async () => {
+    it('reads a pseudo file reporting size 0 over a sequential stream and gets its real content', async () => {
       const content = Buffer.from('processor\t: 0\nmodel name\t: fake\n');
       const sftp = new FakeTransferSftp({
         statSizes: [0],
@@ -2102,7 +2103,7 @@ describe('SSH Connection Manager', () => {
       assert.deepStrictEqual(fs.readFileSync(localFile), content);
     });
 
-    it('远端目录不会走 fastGet', async () => {
+    it('never uses fastGet on a remote directory', async () => {
       const sftp = new FakeTransferSftp({
         statSizes: [FAST_MIN_BYTES],
         isFile: false,
@@ -2116,7 +2117,7 @@ describe('SSH Connection Manager', () => {
       assert.strictEqual(sftp.readStreamCalls.length, 1);
     });
 
-    it('大文件下载使用 fastGet 并发传输', async () => {
+    it('downloads a large file concurrently with fastGet', async () => {
       const content = Buffer.alloc(FAST_MIN_BYTES, 3);
       const sftp = new FakeTransferSftp({
         statSizes: [FAST_MIN_BYTES],
@@ -2132,12 +2133,12 @@ describe('SSH Connection Manager', () => {
       assert.deepStrictEqual(fs.readFileSync(localFile), content);
     });
 
-    it('下载期间远端文件增长时补齐尾部', async () => {
+    it('fetches the tail when the remote file grows during a download', async () => {
       const head = Buffer.alloc(FAST_MIN_BYTES, 1);
       const tail = Buffer.from('appended-while-downloading');
       const content = Buffer.concat([head, tail]);
       const sftp = new FakeTransferSftp({
-        // 第一次 stat 决定走 fastGet，第二次 stat 时文件已变长。
+        // The first stat picks fastGet, by the second stat the file has grown.
         statSizes: [head.length, content.length],
         remoteContent: content,
         fastGetBytes: head.length,

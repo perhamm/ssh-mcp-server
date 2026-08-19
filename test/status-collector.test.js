@@ -28,7 +28,7 @@ function fakeRemote(values, { lineEnding = '\n' } = {}) {
 }
 
 describe('status collector', () => {
-  it('所有探针合并为一条单行命令', async () => {
+  it('merges every probe into a single line command', async () => {
     const scripts = [];
     await collectSystemStatus((script) => {
       scripts.push(script);
@@ -36,9 +36,9 @@ describe('status collector', () => {
     }, 'dev');
 
     assert.strictEqual(scripts.length, 1);
-    // 多行脚本会被 commandTemplate 的引号包裹破坏
+    // A multiline script would be broken by the quoting of commandTemplate.
     assert.ok(!scripts[0].includes('\n'));
-    // 每个探针都被隔离，单个失败不影响其余，且整体以成功退出
+    // Every probe is isolated, so one failure neither hides the rest nor fails the run.
     assert.ok(scripts[0].endsWith('; true'));
 
     const { fields } = readProbes(scripts[0]);
@@ -47,7 +47,7 @@ describe('status collector', () => {
     assert.strictEqual(new Set(fields).size, fields.length);
   });
 
-  it('按 marker 还原各字段', async () => {
+  it('restores every field by its marker', async () => {
     const status = await collectSystemStatus(
       fakeRemote({
         hostname: 'web-01',
@@ -65,13 +65,13 @@ describe('status collector', () => {
     assert.strictEqual(status.osName, 'Linux');
     assert.strictEqual(status.kernelVersion, '6.1.0');
     assert.deepStrictEqual(status.memory, { free: '2.1G', total: '7.7G' });
-    // 解析时会各减去一行表头
+    // The parser drops one header line from each of them.
     assert.deepStrictEqual(status.processes, { running: 180, threads: 900 });
   });
 
-  // 多行字段是 CRLF 归一化真正起作用的地方：逐行拆分的值不会再单独 trim，
-  // 残留的 \r 会直接进入结果。
-  it('pty 的 CRLF 输出同样能解析', async () => {
+  // Multiline fields are where the CRLF normalisation matters: values split per line are
+  // not trimmed again, so a leftover \r would land in the result.
+  it('parses the CRLF output of a pty as well', async () => {
     const status = await collectSystemStatus(
       fakeRemote(
         {
@@ -98,7 +98,7 @@ describe('status collector', () => {
     ]);
   });
 
-  it('空探针不影响其它字段', async () => {
+  it('keeps an empty probe from affecting the other fields', async () => {
     const status = await collectSystemStatus(
       fakeRemote({ hostname: 'web-03', ipAddresses: '', osName: 'Linux' }),
       'dev',
@@ -109,9 +109,9 @@ describe('status collector', () => {
     assert.strictEqual(status.ipAddresses, undefined);
   });
 
-  // 命令白名单会拒绝这条探针脚本；那种情况下字段留空即可，
-  // 不能把主机报成不可达。
-  it('命令被拒绝时字段留空但仍视为可达', async () => {
+  // A command whitelist rejects the probe script. The fields stay empty in that case,
+  // the host must not be reported as unreachable.
+  it('leaves the fields empty but keeps the host reachable when the command is rejected', async () => {
     const status = await collectSystemStatus(
       () => Promise.reject(new Error('Command validation failed')),
       'dev',
@@ -122,7 +122,7 @@ describe('status collector', () => {
     assert.ok(status.lastUpdated);
   });
 
-  it('先逐条授权探针，再只批量执行允许的命令', async () => {
+  it('authorises every probe first and then runs only the allowed commands', async () => {
     const scripts = [];
     const recordingRemote = fakeRemote({ hostname: 'allowed-host' });
     const status = await collectSystemStatus(
@@ -141,7 +141,7 @@ describe('status collector', () => {
     assert.ok(!scripts[0].includes('cat /etc/os-release'));
   });
 
-  it('没有获准探针时不执行远端脚本', async () => {
+  it('runs no remote script when no probe is allowed', async () => {
     let calls = 0;
     const status = await collectSystemStatus(
       async () => {

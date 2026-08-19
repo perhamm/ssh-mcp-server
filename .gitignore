@@ -1,14 +1,14 @@
-# 依赖目录
+# dependencies
 node_modules/
 
-# 构建输出
+# build output
 build/
 
-# 操作系统文件
+# os files
 .DS_Store
 Thumbs.db
 
-# 编辑器和IDE文件
+# editors and IDEs
 .idea/
 .vscode/
 *.swp

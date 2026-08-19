@@ -20,33 +20,31 @@ describe('SSH Config Parser', () => {
     testConfigWithIncludePath = path.join(fixturesDir, 'ssh-config-include');
     includedConfigPath = path.join(fixturesDir, 'ssh-config-included');
 
-    // 基本测试配置
     fs.writeFileSync(testConfigPath, [
-      '# 多别名测试',
+      '# multiple aliases',
       'Host dev staging',
       '    HostName 192.168.1.100',
       '    Port 2222',
       '    User devuser',
       '    IdentityFile ~/.ssh/dev_key',
       '',
-      '# 单别名测试',
+      '# single alias',
       'Host prod',
       '    HostName 10.0.0.50',
       '    User produser',
       '    IdentityFile ~/.ssh/prod_key',
       '',
-      '# 通配符测试',
+      '# wildcard',
       'Host *.example.com',
       '    User wildcarduser',
       '    Port 2200',
       '',
-      '# 全局默认值',
+      '# global defaults',
       'Host *',
       '    Port 22',
       '    User defaultuser',
     ].join('\n'));
 
-    // 被包含的配置文件
     fs.writeFileSync(includedConfigPath, [
       'Host included-host',
       '    HostName 172.16.0.1',
@@ -54,7 +52,6 @@ describe('SSH Config Parser', () => {
       '    User includeduser',
     ].join('\n'));
 
-    // 带 Include 的配置文件
     fs.writeFileSync(testConfigWithIncludePath, [
       `Include ${includedConfigPath}`,
       '',
@@ -72,48 +69,48 @@ describe('SSH Config Parser', () => {
     fs.rmSync(fixturesDir, { recursive: true, force: true });
   });
 
-  describe('基本功能', () => {
-    it('应该正确解析单个 Host 别名', () => {
+  describe('basics', () => {
+    it('parses a single Host alias', () => {
       const config = lookupSshConfig('prod', testConfigPath);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.hostName, '10.0.0.50');
       assert.strictEqual(config.user, 'produser');
       assert.strictEqual(config.identityFile, path.join(os.homedir(), '.ssh', 'prod_key'));
-      assert.strictEqual(config.port, 22); // 从 Host * fallback
+      assert.strictEqual(config.port, 22); // from the Host * fallback
     });
 
-    it('应该正确解析多别名 Host 行 - dev', () => {
+    it('parses a multi alias Host line, dev', () => {
       const config = lookupSshConfig('dev', testConfigPath);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.hostName, '192.168.1.100');
       assert.strictEqual(config.port, 2222);
       assert.strictEqual(config.user, 'devuser');
     });
 
-    it('应该正确解析多别名 Host 行 - staging', () => {
+    it('parses a multi alias Host line, staging', () => {
       const config = lookupSshConfig('staging', testConfigPath);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.hostName, '192.168.1.100');
       assert.strictEqual(config.port, 2222);
       assert.strictEqual(config.user, 'devuser');
     });
 
-    it('应该支持通配符匹配', () => {
+    it('matches wildcards', () => {
       const config = lookupSshConfig('server.example.com', testConfigPath);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.user, 'wildcarduser');
       assert.strictEqual(config.port, 2200);
     });
 
-    it('应该使用 Host * 作为默认值', () => {
+    it('falls back to Host * for defaults', () => {
       const config = lookupSshConfig('unknown-host', testConfigPath);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.user, 'defaultuser');
       assert.strictEqual(config.port, 22);
       assert.strictEqual(config.hostName, undefined);
     });
 
-    it('通配符匹配应转义正则特殊字符', () => {
+    it('escapes regexp metacharacters when matching wildcards', () => {
       const tempConfig = path.join(fixturesDir, 'special-pattern-config');
       fs.writeFileSync(tempConfig, [
         'Host host[1]',
@@ -134,7 +131,7 @@ describe('SSH Config Parser', () => {
       fs.unlinkSync(tempConfig);
     });
 
-    it('应该支持 Host 中的否定模式', () => {
+    it('supports negated patterns in Host', () => {
       const tempConfig = path.join(fixturesDir, 'negated-pattern-config');
       fs.writeFileSync(tempConfig, [
         'Host *.example.com !blocked.example.com',
@@ -156,24 +153,24 @@ describe('SSH Config Parser', () => {
     });
   });
 
-  describe('Include 指令', () => {
-    it('应该正确处理 Include 指令', () => {
+  describe('the Include directive', () => {
+    it('follows an Include directive', () => {
       const config = lookupSshConfig('included-host', testConfigWithIncludePath);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.hostName, '172.16.0.1');
       assert.strictEqual(config.port, 3333);
       assert.strictEqual(config.user, 'includeduser');
     });
 
-    it('应该在 Include 后继续解析主配置文件', () => {
+    it('keeps parsing the main file after an Include', () => {
       const config = lookupSshConfig('main-host', testConfigWithIncludePath);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.hostName, '192.168.1.1');
       assert.strictEqual(config.user, 'mainuser');
       assert.strictEqual(config.port, 22);
     });
 
-    it('应该静默跳过不存在的 Include 文件', () => {
+    it('skips an Include file that does not exist', () => {
       const tempConfig = path.join(fixturesDir, 'temp-include-config');
       fs.writeFileSync(tempConfig, [
         'Include /nonexistent/path/config',
@@ -183,15 +180,15 @@ describe('SSH Config Parser', () => {
       ].join('\n'));
 
       const config = lookupSshConfig('test', tempConfig);
-      assert.ok(config, '应该返回非 null 的配置');
+      assert.ok(config, 'the config must not be null');
       assert.strictEqual(config.hostName, '1.2.3.4');
 
       fs.unlinkSync(tempConfig);
     });
   });
 
-  describe('边界情况', () => {
-    it('默认配置文件不存在时应返回 null', () => {
+  describe('edge cases', () => {
+    it('returns null when the default config file is missing', () => {
       const fakeHome = fs.mkdtempSync(path.join(fixturesDir, 'fake-home-'));
       process.env.HOME = fakeHome;
 
@@ -204,13 +201,13 @@ describe('SSH Config Parser', () => {
       }
     });
 
-    it('显式指定的配置文件不存在时应抛出错误', () => {
+    it('throws when an explicitly given config file is missing', () => {
       assert.throws(() => {
         lookupSshConfig('any-host', '/nonexistent/config');
       }, /not found/);
     });
 
-    it('未找到匹配的 Host 时应返回 null', () => {
+    it('returns null when no Host matches', () => {
       const tempConfig = path.join(fixturesDir, 'empty-config');
       fs.writeFileSync(tempConfig, '# Empty config\n');
 
@@ -220,19 +217,19 @@ describe('SSH Config Parser', () => {
       fs.unlinkSync(tempConfig);
     });
 
-    it('应该正确展开 ~ 路径', () => {
+    it('expands a ~ path', () => {
       const config = lookupSshConfig('dev', testConfigPath);
       assert.ok(config);
       assert.ok(config.identityFile.startsWith(os.homedir()));
       assert.ok(!config.identityFile.includes('~'));
     });
 
-    it('应该正确处理注释行', () => {
+    it('handles comment lines', () => {
       const tempConfig = path.join(fixturesDir, 'comment-config');
       fs.writeFileSync(tempConfig, [
-        '# 这是注释',
+        '# a comment',
         'Host test',
-        '    HostName 1.2.3.4 # 行内注释',
+        '    HostName 1.2.3.4 # a trailing comment',
         '    Port 2222',
       ].join('\n'));
 
@@ -244,7 +241,7 @@ describe('SSH Config Parser', () => {
       fs.unlinkSync(tempConfig);
     });
 
-    it('应该正确处理空白行和缩进', () => {
+    it('handles blank lines and indentation', () => {
       const tempConfig = path.join(fixturesDir, 'whitespace-config');
       fs.writeFileSync(tempConfig, [
         '',
@@ -264,8 +261,8 @@ describe('SSH Config Parser', () => {
     });
   });
 
-  describe('First-match-wins 语义', () => {
-    it('应该使用第一个匹配的值', () => {
+  describe('first-match-wins semantics', () => {
+    it('takes the first matching value', () => {
       const tempConfig = path.join(fixturesDir, 'priority-config');
       fs.writeFileSync(tempConfig, [
         'Host test',
@@ -288,7 +285,7 @@ describe('SSH Config Parser', () => {
       fs.unlinkSync(tempConfig);
     });
 
-    it('特定 Host 的值应优先于 Host *', () => {
+    it('prefers a specific Host over Host *', () => {
       const tempConfig = path.join(fixturesDir, 'specific-priority-config');
       fs.writeFileSync(tempConfig, [
         'Host specific',
@@ -301,8 +298,8 @@ describe('SSH Config Parser', () => {
 
       const config = lookupSshConfig('specific', tempConfig);
       assert.ok(config);
-      assert.strictEqual(config.port, 2222); // 来自 Host specific
-      assert.strictEqual(config.user, 'globaluser'); // 来自 Host *
+      assert.strictEqual(config.port, 2222); // from Host specific
+      assert.strictEqual(config.user, 'globaluser'); // from Host *
 
       fs.unlinkSync(tempConfig);
     });

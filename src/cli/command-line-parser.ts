@@ -247,15 +247,9 @@ export class CommandLineParser {
     ) {
       const host = values.host || positionals[0];
 
-      // 尝试从 SSH config 读取配置
       let sshConfigEntry = null;
       if (host) {
-        try {
-          sshConfigEntry = lookupSshConfig(host, values["ssh-config-file"]);
-        } catch (err) {
-          // 显式指定配置文件但读取失败时抛错
-          throw err;
-        }
+        sshConfigEntry = lookupSshConfig(host, values["ssh-config-file"]);
       }
 
       const portStr = values.port || positionals[1] || sshConfigEntry?.port?.toString() || "22";
@@ -276,7 +270,6 @@ export class CommandLineParser {
       const pty = values.pty;
       const tryKeyboard = values["try-keyboard"];
 
-      // 实际连接地址：优先使用 SSH config 的 HostName
       const actualHost = sshConfigEntry?.hostName || host;
 
       if (!actualHost || !portStr || !username || (!password && !privateKey && !resolvedAgent)) {

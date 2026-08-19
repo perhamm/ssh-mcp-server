@@ -46,6 +46,7 @@ interface ConfigIndex {
 interface CachedConfig {
   index: ConfigIndex;
   mtimeMs: number;
+  size: number;
   loadedAt: number;
 }
 
@@ -64,10 +65,11 @@ export function clearSshConfigCache(): void {
 }
 
 /**
- * 查找 SSH 配置文件中指定主机别名的配置
- * @param hostAlias 主机别名
- * @param configFilePath 配置文件路径，默认为 ~/.ssh/config
- * @returns 解析后的配置项，未找到返回 null
+ * Look up the config of a host alias in the SSH config file.
+ *
+ * @param hostAlias host alias
+ * @param configFilePath config file path, defaults to ~/.ssh/config
+ * @returns the resolved entry, or null when the alias is not found
  */
 export function lookupSshConfig(
   hostAlias: string,
@@ -162,20 +164,23 @@ export function resolveJumpChain(
 function readConfigIndex(configFilePath?: string): ConfigIndex | null {
   const configPath = configFilePath || path.join(os.homedir(), '.ssh', 'config');
 
-  // 默认路径不存在时静默返回 null
+  // A missing default config is not an error, an explicit path is.
   if (!configFilePath && !fs.existsSync(configPath)) {
     return null;
   }
 
-  // 显式指定路径不存在时抛错
   if (configFilePath && !fs.existsSync(configPath)) {
     throw new Error(`SSH config file not found: ${configPath}`);
   }
 
   const cached = configCache.get(configPath);
   let mtimeMs = 0;
+  // Two edits can land in the same mtime tick, so the size is compared as well.
+  let size = 0;
   try {
-    mtimeMs = fs.statSync(configPath).mtimeMs;
+    const stats = fs.statSync(configPath);
+    mtimeMs = stats.mtimeMs;
+    size = stats.size;
   } catch {
     // A file that cannot be stat'ed is parsed as before and simply not cached.
   }
@@ -183,13 +188,14 @@ function readConfigIndex(configFilePath?: string): ConfigIndex | null {
   if (
     cached &&
     cached.mtimeMs === mtimeMs &&
+    cached.size === size &&
     Date.now() - cached.loadedAt < CONFIG_CACHE_TTL_MS
   ) {
     return cached.index;
   }
 
   const index = buildConfigIndex(parseConfigFile(configPath, new Set()));
-  configCache.set(configPath, { index, mtimeMs, loadedAt: Date.now() });
+  configCache.set(configPath, { index, mtimeMs, size, loadedAt: Date.now() });
   return index;
 }
 
@@ -280,10 +286,10 @@ function parsePort(value: string): number | undefined {
 }
 
 /**
- * 解析 SSH 配置文件
+ * Parse an SSH config file.
  */
 function parseConfigFile(filePath: string, visited: Set<string>): HostBlock[] {
-  // 防止循环引用
+  // Include can point back at a file already being parsed.
   const realPath = fs.realpathSync(filePath);
   if (visited.has(realPath)) {
     return [];
@@ -296,7 +302,6 @@ function parseConfigFile(filePath: string, visited: Set<string>): HostBlock[] {
   let currentBlock: HostBlock | null = null;
 
   for (let line of lines) {
-    // 移除注释和前后空白
     const commentIndex = line.indexOf('#');
     if (commentIndex !== -1) {
       line = line.substring(0, commentIndex);
@@ -305,7 +310,6 @@ function parseConfigFile(filePath: string, visited: Set<string>): HostBlock[] {
 
     if (!line) continue;
 
-    // 解析 Include 指令
     if (line.toLowerCase().startsWith('include ')) {
       if (currentBlock) {
         blocks.push(currentBlock);
@@ -321,7 +325,6 @@ function parseConfigFile(filePath: string, visited: Set<string>): HostBlock[] {
       continue;
     }
 
-    // 解析 Host 行
     if (line.toLowerCase().startsWith('host ')) {
       if (currentBlock) {
         blocks.push(currentBlock);
@@ -334,7 +337,6 @@ function parseConfigFile(filePath: string, visited: Set<string>): HostBlock[] {
       continue;
     }
 
-    // 解析配置项
     if (!currentBlock) {
       currentBlock = {
         patterns: ['*'],
@@ -347,7 +349,7 @@ function parseConfigFile(filePath: string, visited: Set<string>): HostBlock[] {
       const key = line.substring(0, spaceIndex).toLowerCase();
       const value = line.substring(spaceIndex + 1).trim();
 
-      // 只保存第一次出现的值（SSH first-match-wins）
+      // SSH is first-match-wins, so a later value never overrides an earlier one.
       if (!currentBlock.config.has(key)) {
         currentBlock.config.set(key, value);
       }
@@ -362,31 +364,28 @@ function parseConfigFile(filePath: string, visited: Set<string>): HostBlock[] {
 }
 
 /**
- * 展开 Include 路径（支持 ~ 和通配符）
+ * Expand an Include path, supporting ~ and wildcards.
  */
 function expandIncludePath(pattern: string, baseDir: string): string[] {
-  // 展开 ~
   if (pattern.startsWith('~/')) {
     pattern = path.join(os.homedir(), pattern.substring(2));
   } else if (pattern.startsWith('~')) {
-    // ~user 形式不支持，直接返回空
+    // The ~user form is not supported.
     return [];
   } else if (!path.isAbsolute(pattern)) {
-    // 相对路径相对于配置文件所在目录
+    // A relative Include resolves against the directory of the config file.
     pattern = path.join(baseDir, pattern);
   }
 
-  // 使用 glob 展开通配符
   try {
-    // Node.js 22+ 支持 fs.globSync
+    // fs.globSync only exists on Node.js 22+.
     if (typeof fs.globSync === 'function') {
       return fs.globSync(pattern);
     }
   } catch (e) {
-    // glob 失败时静默跳过
+    // A glob that cannot be expanded is skipped, as ssh itself does.
   }
 
-  // 降级：无通配符时直接返回
   if (!pattern.includes('*') && !pattern.includes('?')) {
     return [pattern];
   }
@@ -395,7 +394,7 @@ function expandIncludePath(pattern: string, baseDir: string): string[] {
 }
 
 /**
- * 匹配主机别名
+ * Match a host alias against the parsed blocks.
  */
 function matchHost(hostAlias: string, blocks: HostBlock[]): SshConfigEntry | null {
   const result: SshConfigEntry = {};
@@ -405,7 +404,6 @@ function matchHost(hostAlias: string, blocks: HostBlock[]): SshConfigEntry | nul
 
     if (!matched) continue;
 
-    // first-match-wins：只取第一个匹配到的值
     if (!result.hostName && block.config.has('hostname')) {
       result.hostName = block.config.get('hostname');
     }
@@ -487,7 +485,7 @@ function hostPatternMatches(hostAlias: string, pattern: string): boolean {
 }
 
 /**
- * 展开路径中的 ~
+ * Expand a leading ~ in a path.
  */
 function expandTilde(filePath: string): string {
   if (filePath.startsWith('~/')) {

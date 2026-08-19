@@ -7,7 +7,7 @@ import * as path from 'path';
 import * as os from 'os';
 let fixturesDir;
 
-describe('集成测试', () => {
+describe('Integration', () => {
   let originalArgv;
 
   before(() => {
@@ -21,8 +21,8 @@ describe('集成测试', () => {
     fs.rmSync(fixturesDir, { recursive: true, force: true });
   });
 
-  describe('端到端场景', () => {
-    it('应该能够从命令行参数创建完整配置并传递给连接管理器', () => {
+  describe('end to end scenarios', () => {
+    it('builds a full config from command line arguments and hands it to the connection manager', () => {
       process.argv = [
         'node',
         'test',
@@ -42,7 +42,6 @@ describe('集成测试', () => {
       assert.deepStrictEqual(result.configs.default.commandWhitelist, ['ls', 'cat', 'grep']);
       assert.deepStrictEqual(result.configs.default.commandBlacklist, ['rm', 'shutdown']);
 
-      // 验证可以用这个配置初始化连接管理器
       const manager = SSHConnectionManager.getInstance();
       manager.setConfig(result.configs);
 
@@ -51,7 +50,7 @@ describe('集成测试', () => {
       assert.strictEqual(config.username, 'testuser');
     });
 
-    it('应该能够从命令行参数生成 shell transport 配置', () => {
+    it('builds a shell transport config from command line arguments', () => {
       process.argv = [
         'node',
         'test',
@@ -75,7 +74,7 @@ describe('集成测试', () => {
       assert.strictEqual(config.shellReadyTimeoutMs, 18000);
     });
 
-    it('应该能够从 SSH config 创建完整配置', () => {
+    it('builds a full config from the SSH config', () => {
       const tempSshConfig = path.join(fixturesDir, 'integration-ssh-config');
       fs.writeFileSync(tempSshConfig, [
         'Host integration-test',
@@ -100,7 +99,6 @@ describe('集成测试', () => {
         assert.strictEqual(result.configs.default.username, 'integrationuser');
         assert.ok(result.configs.default.privateKey.includes('integration_key'));
 
-        // 验证可以用这个配置初始化连接管理器
         const manager = SSHConnectionManager.getInstance();
         manager.setConfig(result.configs);
 
@@ -111,7 +109,7 @@ describe('集成测试', () => {
       }
     });
 
-    it('应该能够处理多服务器配置', () => {
+    it('handles a multi server config', () => {
       const tempConfig = path.join(fixturesDir, 'multi-server-config.json');
       fs.writeFileSync(tempConfig, JSON.stringify({
         server1: {
@@ -139,7 +137,6 @@ describe('集成测试', () => {
         const manager = SSHConnectionManager.getInstance();
         manager.setConfig(result.configs);
 
-        // 验证配置列表
         const allInfos = manager.getAllServerInfos();
         assert.strictEqual(allInfos.length, 2);
 
@@ -156,7 +153,7 @@ describe('集成测试', () => {
       }
     });
 
-    it('应该能够从配置文件生成 shell transport 配置', () => {
+    it('builds a shell transport config from a config file', () => {
       const tempConfig = path.join(fixturesDir, 'shell-server-config.json');
       fs.writeFileSync(tempConfig, JSON.stringify({
         shellbox: {
@@ -188,8 +185,8 @@ describe('集成测试', () => {
     });
   });
 
-  describe('错误处理', () => {
-    it('应该正确处理无效的 JSON 配置文件', () => {
+  describe('error handling', () => {
+    it('rejects an invalid JSON config file', () => {
       const invalidConfig = path.join(fixturesDir, 'invalid-config.json');
       fs.writeFileSync(invalidConfig, '{ invalid json }');
 
@@ -203,12 +200,12 @@ describe('集成测试', () => {
       }
     });
 
-    it('应该正确处理缺少必需字段的配置', () => {
+    it('rejects a config with required fields missing', () => {
       const incompleteConfig = path.join(fixturesDir, 'incomplete-config.json');
       fs.writeFileSync(incompleteConfig, JSON.stringify({
         server1: {
           host: '192.168.1.1'
-          // 缺少 port, username 等必需字段
+          // port, username and the rest of the required fields are missing
         }
       }));
 
@@ -222,14 +219,14 @@ describe('集成测试', () => {
       }
     });
 
-    it('应该正确处理不存在的配置文件', () => {
+    it('rejects a config file that does not exist', () => {
       process.argv = ['node', 'test', '--config-file', '/nonexistent/config.json'];
       assert.throws(() => {
         CommandLineParser.parseArgs();
       }, /not found/);
     });
 
-    it('应该正确处理缺少认证参数的情况', () => {
+    it('rejects a config without authentication parameters', () => {
       const emptySshConfig = path.join(fixturesDir, 'empty-ssh-config');
       const originalSshAuthSock = process.env.SSH_AUTH_SOCK;
       fs.writeFileSync(emptySshConfig, '');
@@ -257,7 +254,7 @@ describe('集成测试', () => {
       }
     });
 
-    it('应该正确处理无效的端口号', () => {
+    it('rejects an invalid port number', () => {
       process.argv = ['node', 'test', '--host', '1.2.3.4', '--port', 'abc', '--username', 'user', '--password', 'pass'];
       assert.throws(() => {
         CommandLineParser.parseArgs();

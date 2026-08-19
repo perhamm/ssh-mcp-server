@@ -4,11 +4,11 @@ import { formatServerList } from '../build/tools/list-servers.js';
 import { filterSshHosts, formatSshHostList } from '../build/tools/list-ssh-hosts.js';
 
 describe('List Servers Tool', () => {
-  it('没有配置时应返回友好提示', () => {
+  it('returns a friendly notice when nothing is configured', () => {
     assert.strictEqual(formatServerList([]), 'No SSH servers configured.');
   });
 
-  it('应返回可读摘要和原始 JSON', () => {
+  it('returns a readable summary and the raw JSON', () => {
     const output = formatServerList([
       {
         name: 'dev',
@@ -32,7 +32,7 @@ describe('List Servers Tool', () => {
     assert.match(output, /"name":"dev"/);
   });
 
-  it('原始 JSON 不缩进，且仍可解析回等价对象', () => {
+  it('leaves the raw JSON unindented and still parseable into the same object', () => {
     const servers = [
       {
         name: 'dev',
@@ -62,7 +62,7 @@ describe('List Servers Tool', () => {
     const rawJson = formatServerList(servers).split('\nRaw JSON:\n')[1];
 
     assert.deepStrictEqual(JSON.parse(rawJson), servers);
-    // 缩进换行是这里的主要体积来源，压缩后应只剩一行
+    // Indentation is what makes this payload big, so the compact form is a single line.
     assert.ok(!rawJson.includes('\n'));
     assert.ok(rawJson.length < JSON.stringify(servers, null, 2).length * 0.7);
   });

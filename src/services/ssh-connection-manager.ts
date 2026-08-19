@@ -284,7 +284,7 @@ function redactToolError(error: unknown, secret?: string): unknown {
 
 function isPasswordPrompt(prompt: string): boolean {
   const promptText = prompt.toLowerCase();
-  return promptText.includes("password") || promptText.includes("密码");
+  return promptText.includes("password");
 }
 
 function isAuthMethodAllowedByServer(

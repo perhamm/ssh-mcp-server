@@ -7,7 +7,7 @@
 
 SSH-based MCP (Model Context Protocol) server that allows remote execution of SSH commands via the MCP protocol.
 
-[Русский](README.md) | English | [中文文档](README_ZH.md)
+[Русский](README.md) | English
 
 </div>
 

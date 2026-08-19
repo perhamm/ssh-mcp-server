@@ -9,7 +9,7 @@ MCP-сервер поверх SSH: агент выполняет команды 
 
 Форк [classfang/ssh-mcp-server](https://github.com/classfang/ssh-mcp-server) под ISC.
 
-Русский | [English](README_EN.md) | [中文](README_ZH.md)
+Русский | [English](README_EN.md)
 
 </div>
 
