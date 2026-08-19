@@ -1,0 +1,283 @@
+{
+  "version": "2026.08.19",
+  "updatedAt": "2026-08-19",
+  "source": "https://github.com/classfang/ssh-mcp-server/blob/main/guards/default-guards.json",
+  "forbidden": {
+    "description": "Never allowed. No profile and no sudo lifts these rules.",
+    "rules": [
+      {
+        "id": "user-management",
+        "pattern": "^(useradd|adduser|userdel|deluser|usermod|groupadd|groupmod|groupdel|delgroup|addgroup|newusers|chpasswd|gpasswd|chage|passwd|vipw|vigr)(\\s|$)",
+        "reason": "creates, removes or re-privileges an account"
+      },
+      {
+        "id": "account-file-write",
+        "pattern": "(>|>>)\\s*[^|;&]*/etc/(passwd|shadow|group|gshadow)|^(tee|cp|mv|ln|install|touch|chmod|chown|dd|sed\\s+-\\S*i)\\b[^|;&]*\\s/etc/(passwd|shadow|group|gshadow)",
+        "reason": "writes to an account database"
+      },
+      {
+        "id": "sudoers-write",
+        "pattern": "(>|>>)\\s*[^|;&]*/etc/sudoers|^(tee|cp|mv|ln|install|touch|chmod|chown|rm|sed\\s+-\\S*i)\\b[^|;&]*\\s/etc/sudoers",
+        "reason": "changes the sudo policy"
+      },
+      {
+        "id": "visudo",
+        "pattern": "^visudo(\\s|$)",
+        "reason": "edits the sudo policy"
+      },
+      {
+        "id": "crontab-write",
+        "pattern": "^crontab(?!\\s+(-u\\s+\\S+\\s+)?-l\\b)",
+        "reason": "installs, edits or drops a crontab; only 'crontab -l' is readable"
+      },
+      {
+        "id": "cron-path-write",
+        "pattern": "(>|>>)\\s*[^|;&]*/(etc/cron|etc/anacrontab|var/spool/cron)|^(tee|cp|mv|ln|install|touch|chmod|chown|rm|dd|sed\\s+-\\S*i)\\b[^|;&]*\\s/(etc/cron|etc/anacrontab|var/spool/cron)",
+        "reason": "writes a scheduled job"
+      },
+      {
+        "id": "at-schedule",
+        "pattern": "^(at|atq|atrm|batch)(\\s|$)",
+        "reason": "schedules work to run later"
+      },
+      {
+        "id": "systemd-unit-write",
+        "pattern": "(>|>>)\\s*[^|;&]*/(etc|lib|run|usr/lib)/systemd/|^(tee|cp|mv|ln|install|touch|rm|sed\\s+-\\S*i)\\b[^|;&]*\\s/(etc|lib|run|usr/lib)/systemd/|^(systemctl\\s+edit|systemd-run)(\\s|$)",
+        "reason": "writes a unit or timer; persistence changes belong in configuration management"
+      },
+      {
+        "id": "ssh-config-write",
+        "pattern": "(>|>>)\\s*[^|;&]*(/etc/ssh/|\\.ssh/|authorized_keys|known_hosts|sshd_config)|^(tee|cp|mv|ln|install|touch|chmod|chown|rm|dd|truncate|sed\\s+-\\S*i)\\b[^|;&]*\\s\\S*(/etc/ssh/|\\.ssh/|authorized_keys|sshd_config)",
+        "reason": "edits an SSH configuration or an authorized_keys file"
+      },
+      {
+        "id": "ssh-key-tools",
+        "pattern": "^(ssh-keygen|ssh-copy-id|ssh-add)(\\s|$)",
+        "reason": "creates, installs or removes SSH keys"
+      },
+      {
+        "id": "interpreter-inline-code",
+        "pattern": "(^|/)(python[0-9.]*|perl|ruby|php|node|nodejs|lua[0-9.]*|tclsh|Rscript|osascript|pwsh|powershell)(\\s|$)",
+        "reason": "runs code the guards cannot read; put the logic in a reviewed script on the host instead"
+      },
+      {
+        "id": "interpreter-script-file",
+        "pattern": "^(sh|bash|zsh|ksh|dash|ash|csh|tcsh)\\s+(-[^c\\s]\\S*\\s+)*[^-\\s]|^(sh|bash|zsh|ksh|dash|ash)\\s+(-\\S+\\s+)*-s(\\s|$)|^(source|\\.)\\s+\\S",
+        "reason": "runs a script file whose contents the guards cannot read"
+      },
+      {
+        "id": "secret-read",
+        "pattern": "^(cat|zcat|less|more|head|tail|cp|scp|base64|xxd|od|strings|openssl|tar|awk|sed|grep)\\b[^|;&]*(/etc/shadow|/etc/gshadow|id_rsa\\b|id_ed25519\\b|id_ecdsa\\b|id_dsa\\b|\\.ssh/[^\\s]*(key|\\.pem)|\\.aws/credentials|\\.kube/config)",
+        "reason": "reads private keys or credential files"
+      },
+      {
+        "id": "rm-critical-path",
+        "pattern": "^rm\\s+(-\\S+\\s+)*(/|/\\*|\\*|~/?\\*?|\\$HOME/?\\*?|/(etc|var|usr|bin|sbin|lib|lib64|boot|home|opt|srv|data|root)(/\\*)?)/?\\s*$",
+        "reason": "recursive delete of a system directory"
+      },
+      {
+        "id": "rm-shallow-path",
+        "pattern": "^rm\\b(?=[^|;&]*-\\S*[rR])\\s+(?:-\\S+\\s+)*/[^/\\s]+/?\\s*$",
+        "reason": "recursive delete of a whole top-level directory"
+      },
+      {
+        "id": "rm-system-subdir",
+        "pattern": "^rm\\b(?=[^|;&]*-\\S*[rR])\\s+(?:-\\S+\\s+)*/(etc|var|usr|opt|srv|home|root|mnt|media|boot|lib|lib64|bin|sbin|data)/[^/\\s]+/?\\s*$",
+        "reason": "recursive delete of a system subdirectory"
+      },
+      {
+        "id": "rm-wildcard",
+        "pattern": "^rm\\b(?=[^|;&]*-\\S*[rR])(?=[^|;&]*[*?])",
+        "reason": "recursive delete driven by a wildcard"
+      },
+      {
+        "id": "rm-no-preserve-root",
+        "pattern": "--no-preserve-root",
+        "reason": "explicitly disables the root directory guard of rm"
+      },
+      {
+        "id": "find-destructive",
+        "pattern": "^find\\b[^|;&]*\\s-(delete|exec\\s+(rm|shred|mv|chmod|chown))\\b",
+        "reason": "find that deletes or rewrites everything it matches"
+      },
+      {
+        "id": "delete-pipeline",
+        "scope": "command",
+        "pattern": "\\|\\s*(sudo\\s+)?xargs\\b[^|;&]*\\s(rm|shred|unlink)\\b",
+        "reason": "deletes whatever the pipeline produced"
+      },
+      {
+        "id": "filesystem-format",
+        "pattern": "^(mkfs(\\.\\S+)?|mke2fs|wipefs|blkdiscard|sgdisk|fdisk|cfdisk|parted|cryptsetup|shred)(\\s|$)",
+        "reason": "destroys a filesystem or partition table"
+      },
+      {
+        "id": "dd-to-device",
+        "pattern": "\\bdd\\b[^|;&]*\\bof=/dev/",
+        "reason": "writes raw data to a block device"
+      },
+      {
+        "id": "redirect-to-device",
+        "pattern": ">\\s*/dev/(sd|nvme|vd|hd|xvd|mapper)",
+        "reason": "overwrites a block device through a shell redirect"
+      },
+      {
+        "id": "fork-bomb",
+        "pattern": ":\\(\\)\\s*\\{[^}]*\\|[^}]*&\\s*\\}\\s*;\\s*:",
+        "reason": "fork bomb"
+      }
+    ],
+    "remoteWritePaths": [
+      "/etc/sudoers",
+      "/etc/sudoers.d",
+      "/etc/cron*",
+      "/etc/anacrontab",
+      "/var/spool/cron",
+      "/etc/systemd",
+      "/lib/systemd",
+      "/usr/lib/systemd",
+      "/run/systemd",
+      "/etc/ssh",
+      "/etc/passwd",
+      "/etc/shadow",
+      "/etc/group",
+      "/etc/gshadow",
+      "/etc/pam.d",
+      "**/.ssh"
+    ],
+    "remoteReadPaths": [
+      "/etc/shadow",
+      "/etc/gshadow",
+      "/etc/sudoers",
+      "/etc/sudoers.d",
+      "**/.ssh"
+    ]
+  },
+  "profiles": {
+    "safe": {
+      "description": "Blocks destructive commands on top of the forbidden core. Everything else is allowed.",
+      "allowSudo": true,
+      "maxCommandLength": 5000,
+      "deny": [
+        {
+          "id": "power-control",
+          "pattern": "^(shutdown|reboot|halt|poweroff)(\\s|$)",
+          "reason": "powers off or reboots the host"
+        },
+        {
+          "id": "power-control-systemd",
+          "pattern": "^(systemctl\\s+(reboot|poweroff|halt|kexec|emergency|rescue|isolate)|init\\s+[06])(\\s|$)",
+          "reason": "powers off, reboots or switches the runlevel of the host"
+        },
+        {
+          "id": "chmod-chown-system-root",
+          "pattern": "^(chmod|chown|chgrp)\\s+(-\\S+\\s+)*\\S+\\s+/(etc|var|usr|bin|sbin|boot|root|home|lib|lib64)?/?\\s*$",
+          "reason": "changes ownership or mode of a system directory tree"
+        },
+        {
+          "id": "firewall-flush",
+          "pattern": "^(iptables|ip6tables)\\s+(-F|-X|-Z|--flush|--delete-chain)|^nft\\s+flush\\b|^ufw\\s+(disable|reset)\\b|^firewall-cmd\\s+.*--panic-off",
+          "reason": "drops the firewall ruleset"
+        },
+        {
+          "id": "critical-service-stop",
+          "pattern": "^systemctl\\s+(stop|disable|mask)\\s+.*(ssh|sshd|firewalld|kubelet|docker|containerd|crio|systemd-networkd|NetworkManager|network|chronyd|ntpd)",
+          "reason": "stops a service the host or your access depends on"
+        },
+        {
+          "id": "log-destruction",
+          "pattern": "^history\\s+-c\\b|^journalctl\\b[^|;&]*--vacuum|^(rm|truncate|shred)\\b[^|;&]*/var/log|>\\s*/var/log/",
+          "reason": "destroys audit or system logs"
+        },
+        {
+          "id": "kill-init",
+          "pattern": "^kill\\s+(-9|-KILL|-SIGKILL)\\s+1(\\s|$)|^killall\\s+-9(\\s|$)|^pkill\\s+(-9|-KILL)\\s+-u\\s+root(\\s|$)",
+          "reason": "kills PID 1 or every process of a user"
+        },
+        {
+          "id": "move-system-directory",
+          "pattern": "^mv\\s+(-\\S+\\s+)*/(etc|var|usr|bin|sbin|boot|lib|lib64|root)(/\\S*)?\\s",
+          "reason": "moves a system directory"
+        },
+        {
+          "id": "package-removal",
+          "pattern": "^(apt|apt-get)\\s+(remove|purge|autoremove)\\b|^(yum|dnf)\\s+(remove|erase)\\b|^(zypper)\\s+(rm|remove)\\b|^pacman\\s+-R",
+          "reason": "removes installed packages"
+        },
+        {
+          "id": "kubernetes-destructive",
+          "pattern": "^kubectl\\b[^|;&]*\\s(delete|drain|taint)\\b|^helm\\s+(uninstall|delete|rollback)\\b",
+          "reason": "deletes or drains Kubernetes objects"
+        },
+        {
+          "id": "docker-destructive",
+          "pattern": "^docker\\s+(system\\s+prune|volume\\s+rm|volume\\s+prune|image\\s+prune|network\\s+prune|rm\\s+-f|rmi\\s+-f)\\b",
+          "reason": "removes containers, images or volumes"
+        },
+        {
+          "id": "git-force-push",
+          "pattern": "^git\\s+push\\b[^|;&]*(--force(?!-with-lease)|\\s-f\\b)|^git\\s+(reset\\s+--hard|clean\\s+-\\S*f)",
+          "reason": "discards commits or working tree state"
+        },
+        {
+          "id": "database-destructive",
+          "scope": "command",
+          "pattern": "\\b(drop\\s+(database|table|schema)|truncate\\s+table|delete\\s+from\\s+\\S+\\s*;?\\s*$)\\b|\\b(flushall|flushdb)\\b",
+          "reason": "destroys database contents"
+        },
+        {
+          "id": "pipe-to-shell",
+          "scope": "command",
+          "pattern": "\\b(curl|wget|fetch)\\b[^|]*\\|\\s*(sudo\\s+)?(ba|z|k|da|a|c)?sh\\b",
+          "reason": "executes code downloaded from the network"
+        },
+        {
+          "id": "kernel-module",
+          "pattern": "^(insmod|rmmod|modprobe\\s+-r)(\\s|$)",
+          "reason": "loads or unloads a kernel module"
+        },
+        {
+          "id": "interactive-editor",
+          "pattern": "^(vi|vim|nvim|nano|pico|emacs)(\\s|$)",
+          "reason": "interactive editor blocks the session until the command times out"
+        }
+      ]
+    },
+    "readonly": {
+      "description": "Allows only read-only diagnostics. Everything not on the allow list is blocked.",
+      "extends": "safe",
+      "allowSudo": false,
+      "allowFileWrite": false,
+      "allow": [
+        { "id": "listing", "pattern": "^(ls|ll|dir|tree)(\\s|$)" },
+        { "id": "file-read", "pattern": "^(cat|zcat|bat|head|tail|tac|nl|strings|readlink|realpath|basename|dirname)(\\s|$)" },
+        { "id": "search", "pattern": "^(grep|egrep|fgrep|zgrep|rg|ag|find|fd|locate)(\\s|$)" },
+        { "id": "file-meta", "pattern": "^(stat|file|wc|md5sum|sha1sum|sha256sum|cksum|diff|cmp)(\\s|$)" },
+        { "id": "host-info", "pattern": "^(uname|hostname|hostnamectl|whoami|id|groups|date|arch|nproc|lscpu|lsmem|lsblk|lsof|lsusb|lspci|lsmod|mount|findmnt|blkid|uptime|timedatectl|localectl)(\\s|$)" },
+        { "id": "resources", "pattern": "^(df|du|free|vmstat|iostat|mpstat|pidstat|sar|dstat|top\\s+-b|ps|pgrep|pidof|pstree|numactl)(\\s|$)" },
+        { "id": "network", "pattern": "^(ip|ss|netstat|ifconfig|route|arp|ping|ping6|traceroute|tracepath|mtr|dig|host|nslookup|getent|resolvectl|nc\\s+-z)(\\s|$)" },
+        { "id": "systemd", "pattern": "^(systemctl\\s+(status|is-active|is-enabled|is-failed|list-units|list-unit-files|list-timers|list-sockets|show|cat)|journalctl|systemd-analyze|dmesg|last|lastlog|who|w)(\\s|$)" },
+        { "id": "containers", "pattern": "^(docker\\s+(ps|logs|inspect|images|stats|version|info|top|port|diff|history)|crictl\\s+(ps|pods|logs|inspect|images|stats)|podman\\s+(ps|logs|inspect|images))(\\s|$)" },
+        { "id": "kubernetes", "pattern": "^(kubectl\\s+(get|describe|logs|top|version|api-resources|api-versions|explain|cluster-info|auth\\s+can-i|config\\s+(view|get-contexts|current-context))|helm\\s+(list|ls|status|get|history|show|version))(\\s|$)" },
+        { "id": "text-processing", "pattern": "^(echo|printf|env|printenv|which|whereis|type|sort|uniq|cut|tr|awk|sed|jq|yq|column|paste|join|comm|xxd|od|base64|xargs\\s+-n)(\\s|$)" },
+        { "id": "packages", "pattern": "^(rpm\\s+-q|dpkg\\s+(-l|-L|-s|--list|--status)|apt\\s+list|apt-cache|yum\\s+list|dnf\\s+list|pip\\s+(list|show)|npm\\s+(ls|list))(\\s|$)" },
+        { "id": "archives", "pattern": "^(tar\\s+-?t|unzip\\s+-l|zipinfo|gzip\\s+-l)(\\s|$)" },
+        { "id": "git-read", "pattern": "^git\\s+(status|log|show|diff|branch|remote|describe|rev-parse|config\\s+--get)(\\s|$)" },
+        { "id": "hardware", "pattern": "^(nvidia-smi|sensors|smartctl\\s+-i|ipmitool\\s+\\S+\\s+(sdr|sensor))(\\s|$)" },
+        { "id": "navigation", "pattern": "^(cd|pwd|pushd|popd|true|false)(\\s|$)" }
+      ],
+      "deny": [
+        {
+          "id": "sed-in-place",
+          "pattern": "^sed\\s+(-\\S*i|--in-place)",
+          "reason": "in-place edit is a write operation"
+        },
+        {
+          "id": "follow-mode",
+          "pattern": "^(tail|journalctl|kubectl\\s+logs|docker\\s+logs)\\b[^|;&]*(\\s-f\\b|--follow)",
+          "reason": "streaming output blocks until the command times out; use -n or --since instead"
+        }
+      ]
+    }
+  }
+}

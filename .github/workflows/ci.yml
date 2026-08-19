@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate the guard ruleset
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const ruleset = JSON.parse(fs.readFileSync("guards/default-guards.json", "utf8"));
+            const rules = [
+              ...(ruleset.forbidden?.rules || []),
+              ...Object.values(ruleset.profiles).flatMap((p) => [...(p.allow || []), ...(p.deny || [])]),
+            ];
+            const ids = new Set();
+            for (const rule of rules) {
+              if (ids.has(rule.id)) throw new Error(`duplicate rule id: ${rule.id}`);
+              ids.add(rule.id);
+              new RegExp(rule.pattern, "i");
+            }
+            console.log(`ruleset ${ruleset.version}: ${rules.length} rules compiled`);
+          '

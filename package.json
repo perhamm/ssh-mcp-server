@@ -1,0 +1,58 @@
+{
+  "name": "@perhamm/ssh-mcp-server",
+  "version": "1.10.0",
+  "description": "SSH MCP server with guard profiles, sudo from the environment, known_hosts verification and tunnels",
+  "main": "build/index.js",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/perhamm/ssh-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/perhamm/ssh-mcp-server/issues"
+  },
+  "homepage": "https://github.com/perhamm/ssh-mcp-server#readme",
+  "bin": {
+    "ssh-mcp-server": "build/index.js"
+  },
+  "scripts": {
+    "test": "node scripts/run-tests.js",
+    "test:watch": "node --test --watch test/**/*.test.js",
+    "build": "node scripts/build.js",
+    "guards:update": "node scripts/update-guards.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ssh",
+    "mcp",
+    "model-context-protocol",
+    "server",
+    "sre",
+    "cli"
+  ],
+  "author": "Anton Voskresensky",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "socks": "^2.8.7",
+    "ssh2": "^1.17.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/ssh2": "^1.15.5",
+    "typescript": "^5.8.2"
+  },
+  "files": [
+    "build/**/*",
+    "guards/**/*",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
