@@ -1,6 +1,6 @@
 {
   "name": "@perhamm/ssh-mcp-server",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "SSH MCP server with guard profiles, sudo from the environment, known_hosts verification and tunnels",
   "main": "build/index.js",
   "type": "module",
