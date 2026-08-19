@@ -72,4 +72,4 @@ async function main(): Promise<void> {
   await sshMcpServer.run();
 }
 
-main().catch((error) => Logger.handleError(error, "【SSH MCP Server Error】", true));
+main().catch((error) => Logger.handleError(error, "SSH MCP Server error", true));
