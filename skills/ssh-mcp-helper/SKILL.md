@@ -166,6 +166,8 @@ So `uname -a`, `df -h`, `free -h`, `uptime` and `hostname -I` are already answer
 
 **The guard profile is visible.** `list-servers` reports `guards=safe ruleset=... allow=N deny=N forbidden=N sudo=allowed upload=allowed` per connection. Read it before planning a chain of commands rather than discovering the limits one refusal at a time.
 
+**A host behind an unnamed bastion.** `SSH_CONNECTION_TIMEOUT` on an alias that `list-ssh-hosts` does list usually means the route, not the host: part of a fleet sits behind a hop the SSH config does not name. Pass `proxyJump` on the call itself, naming hops that `list-ssh-hosts` shows. Do not edit the user's `~/.ssh/config` to fix this, it is generated more often than not.
+
 **Probes obey the guards.** With a whitelist in force, only the allowed probes run, so `status` may be partial. Partial status still means the host is reachable; it is not a connection problem.
 
 ## Cheat sheet
@@ -179,6 +181,7 @@ So `uname -a`, `df -h`, `free -h`, `uptime` and `hostname -I` are already answer
 | ssh-agent | `--agent /path/to/socket` (or nothing when `SSH_AUTH_SOCK` is set) |
 | Bastion from the SSH config | nothing: `ProxyJump` is followed automatically |
 | Bastion given by hand | `--proxy-jump "bastion,gateway:2222"` |
+| Bastion for one call only | `proxyJump` argument of `execute-command`, `download`, `open-tunnel` |
 | SOCKS or HTTP proxy | `--proxy socks5://user:pwd@host:1080` |
 | Interactive-only jump host | `--transport-mode shell --shell-ready-timeout 15000` |
 | Several fixed hosts | `--config-file /abs/path/ssh-config.json` |

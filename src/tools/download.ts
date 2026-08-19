@@ -18,11 +18,21 @@ export function registerDownloadTool(server: McpServer): void {
         remotePath: z.string().describe("Remote path"),
         localPath: z.string().describe("Local path"),
         connectionName: z.string().optional().describe("SSH connection name (optional, default is 'default')"),
+        proxyJump: z
+          .string()
+          .optional()
+          .describe(
+            "Comma separated jump hosts to reach this connection through, overriding the chain of the SSH config. Every hop has to be an alias listed by list-ssh-hosts. Use it when a host is only reachable through a bastion the SSH config does not name.",
+          ),
       },
     },
-    async ({ remotePath, localPath, connectionName }) => {
+    async ({ remotePath, localPath, connectionName, proxyJump }) => {
       try {
-        const result = await sshManager.download(remotePath, localPath, connectionName);
+        const result = await sshManager.download(
+          remotePath,
+          localPath,
+          sshManager.resolveConnection(connectionName, proxyJump),
+        );
         return {
           content: [{ type: "text", text: result }],
         };

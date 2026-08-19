@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { TunnelManager, TunnelInfo } from "../services/tunnel-manager.js";
+import { SSHConnectionManager } from "../services/ssh-connection-manager.js";
 import { Logger } from "../utils/logger.js";
 import { ToolError, toToolError } from "../utils/tool-error.js";
 
@@ -90,16 +91,25 @@ export function registerTunnelTools(server: McpServer): void {
           .string()
           .optional()
           .describe("SSH connection name or SSH config host alias to tunnel through"),
+        proxyJump: z
+          .string()
+          .optional()
+          .describe(
+            "Comma separated jump hosts to reach this connection through, overriding the chain of the SSH config. Every hop has to be an alias listed by list-ssh-hosts. Use it when a host is only reachable through a bastion the SSH config does not name.",
+          ),
       },
     },
-    async ({ type, localPort, remoteHost, remotePort, connectionName }) => {
+    async ({ type, localPort, remoteHost, remotePort, connectionName, proxyJump }) => {
       try {
         const tunnel = await tunnelManager.openTunnel({
           type,
           localPort,
           remoteHost,
           remotePort,
-          connectionName,
+          connectionName: SSHConnectionManager.getInstance().resolveConnection(
+            connectionName,
+            proxyJump,
+          ),
         });
 
         const usage =

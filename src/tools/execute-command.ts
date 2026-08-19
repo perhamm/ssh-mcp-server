@@ -37,14 +37,20 @@ export function registerExecuteCommandTool(server: McpServer): void {
           .describe(
             "Run the command through sudo. The password is read from the server environment and is never part of this call or of the output.",
           ),
+        proxyJump: z
+          .string()
+          .optional()
+          .describe(
+            "Comma separated jump hosts to reach this connection through, overriding the chain of the SSH config. Every hop has to be an alias listed by list-ssh-hosts. Use it when a host is only reachable through a bastion the SSH config does not name.",
+          ),
       },
     },
-    async ({ cmdString, directory, connectionName, timeout, sudo }) => {
+    async ({ cmdString, directory, connectionName, timeout, sudo, proxyJump }) => {
       try {
         const result = await sshManager.executeCommand(
           cmdString,
           directory,
-          connectionName,
+          sshManager.resolveConnection(connectionName, proxyJump),
           {
             timeout,
             sudo,

@@ -515,6 +515,83 @@ export class SSHConnectionManager {
     };
   }
 
+  /**
+   * Resolve the connection a tool call should use, honouring a jump chain the
+   * caller supplied for this call.
+   *
+   * Part of a fleet is only reachable through a hop that the SSH config does
+   * not name, and that config is often generated, so editing it is not an
+   * option. The chain the caller passes lives under its own connection key, so
+   * the same alias reached two different ways stays two separate connections
+   * instead of silently reusing whichever came up first.
+   */
+  public resolveConnection(name?: string, proxyJump?: string): string | undefined {
+    const chain = proxyJump?.trim();
+    if (!chain) {
+      return name;
+    }
+
+    const alias = name || this.defaultName;
+    const key = `${alias} via ${chain}`;
+
+    if (this.configs[key]) {
+      return key;
+    }
+
+    const base = this.configs[alias] || this.resolveDynamicConfig(alias);
+    if (!base) {
+      throw new ToolError(
+        "SSH_CONFIGURATION_MISSING",
+        this.dynamicHosts.enabled
+          ? `SSH configuration for '${alias}' not set and no such host alias in the SSH config. Call list-ssh-hosts to see the available aliases.`
+          : `SSH configuration for '${alias}' not set`,
+        false,
+      );
+    }
+
+    this.assertJumpChainDeclared(chain);
+    this.registerConfig(key, { ...base, name: key, proxyJump: chain });
+
+    return key;
+  }
+
+  /**
+   * Every hop of a caller supplied chain has to be an alias declared in the SSH
+   * config. Without that rule a caller could name an arbitrary address and use
+   * this server to reach hosts it was never given.
+   */
+  private assertJumpChainDeclared(chain: string): void {
+    if (!this.dynamicHosts.enabled) {
+      throw new ToolError(
+        "SSH_JUMP_NOT_ALLOWED",
+        "A proxyJump given per call needs --ssh-config-hosts: the hops are resolved through the SSH config",
+        false,
+      );
+    }
+
+    const declared = new Set(
+      listSshConfigHosts(this.dynamicHosts.sshConfigFile).map(
+        (host) => host.alias,
+      ),
+    );
+
+    for (const hop of chain.split(",")) {
+      const trimmed = hop.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const alias = trimmed.replace(/^[^@]*@/, "").replace(/:\d+$/, "");
+      if (!declared.has(alias)) {
+        throw new ToolError(
+          "SSH_JUMP_NOT_ALLOWED",
+          `Jump host '${alias}' is not an alias declared in the SSH config. Call list-ssh-hosts to see the available aliases.`,
+          false,
+        );
+      }
+    }
+  }
+
   private isHostAllowed(alias: string): boolean {
     const patterns = this.dynamicHosts.allowPatterns;
     if (!patterns || patterns.length === 0) {

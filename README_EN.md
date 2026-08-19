@@ -398,6 +398,21 @@ Every next hop connects through the channel of the previous one, exactly as `ssh
 
 The form `ProxyCommand ssh bastion -W %h:%p` is read as the equivalent of `ProxyJump bastion`: that is what ssh expands the short form into, and generated configs carry it far more often. The `-l` and `-p` flags of the hop are honoured and `%r` is substituted with the user of the target. Every other `ProxyCommand` is ignored: the server runs no subprocess of its own.
 
+When a host is only reachable through a hop the SSH config does not name, the chain comes from the call itself. `execute-command`, `download` and `open-tunnel` take a `proxyJump` argument that overrides the chain of the config. This is what a generated SSH config needs: editing it is pointless, the next rollout overwrites the edit.
+
+```json
+{
+  "tool": "execute-command",
+  "params": {
+    "cmdString": "hostname",
+    "connectionName": "r-ulybka.node1-master",
+    "proxyJump": "r-ulybka.prod-master-0"
+  }
+}
+```
+
+Such a connection lives under a name of its own, `alias via chain`, so one alias reached two different ways stays two connections and shows up as two lines in `list-servers`. Every hop has to be an alias from the config, otherwise the caller could point the server at an arbitrary address. An unknown hop comes back as `SSH_JUMP_NOT_ALLOWED`.
+
 ### Proxy
 
 ```json

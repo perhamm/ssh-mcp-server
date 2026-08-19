@@ -30,6 +30,16 @@ describe('SSH config connections resolved on demand', () => {
       '    HostName 10.20.30.41',
       '    User dev',
       `    IdentityFile ${keyPath}`,
+      '',
+      'Host bastion',
+      '    HostName 10.20.30.1',
+      '    User jump',
+      `    IdentityFile ${keyPath}`,
+      '',
+      'Host old-master',
+      '    HostName 10.20.30.63',
+      '    User ops',
+      `    IdentityFile ${keyPath}`,
     ].join('\n'));
   });
 
@@ -40,6 +50,127 @@ describe('SSH config connections resolved on demand', () => {
   beforeEach(() => {
     manager = SSHConnectionManager.getInstance();
     manager.setConfig({});
+  });
+
+  it('keeps the connection name when no jump chain is given', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    assert.strictEqual(manager.resolveConnection('prod-master'), 'prod-master');
+    assert.strictEqual(manager.resolveConnection('prod-master', '   '), 'prod-master');
+  });
+
+  it('puts a caller supplied jump chain under its own connection', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    const key = manager.resolveConnection('old-master', 'prod-master');
+
+    assert.strictEqual(key, 'old-master via prod-master');
+    const config = manager.getConfig(key);
+    assert.strictEqual(config.host, '10.20.30.63');
+    assert.strictEqual(config.proxyJump, 'prod-master');
+    assert.strictEqual(manager.getConfig('old-master').proxyJump, undefined);
+  });
+
+  it('overrides the jump chain of the SSH config for that call only', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    const key = manager.resolveConnection('prod-master', 'dev-master');
+
+    assert.strictEqual(manager.getConfig(key).proxyJump, 'dev-master');
+    assert.strictEqual(manager.getConfig('prod-master').proxyJump, 'bastion');
+  });
+
+  it('reuses the connection of a repeated jump chain', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    assert.strictEqual(
+      manager.resolveConnection('old-master', 'bastion'),
+      manager.resolveConnection('old-master', 'bastion'),
+    );
+  });
+
+  it('accepts a hop carrying a user and a port', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    const key = manager.resolveConnection('old-master', 'ops@bastion:2222');
+    assert.strictEqual(manager.getConfig(key).proxyJump, 'ops@bastion:2222');
+  });
+
+  it('refuses a hop that is not declared in the SSH config', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    assert.throws(
+      () => manager.resolveConnection('old-master', '10.0.0.1'),
+      /SSH_JUMP_NOT_ALLOWED|not an alias declared/,
+    );
+  });
+
+  it('refuses a hop when the chain has one undeclared entry', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    assert.throws(
+      () => manager.resolveConnection('old-master', 'bastion,evil.example.com'),
+      /not an alias declared/,
+    );
+  });
+
+  it('refuses a caller supplied chain without --ssh-config-hosts', () => {
+    manager.setDynamicHosts({ enabled: false, template: {} });
+    manager.setConfig({
+      only: {
+        name: 'only',
+        host: '10.20.30.99',
+        port: 22,
+        username: 'ops',
+        password: 'pwd',
+      },
+    });
+
+    assert.throws(
+      () => manager.resolveConnection('only', 'bastion'),
+      /needs --ssh-config-hosts/,
+    );
+  });
+
+  it('refuses a jump chain for an alias that does not exist', () => {
+    manager.setDynamicHosts({
+      enabled: true,
+      sshConfigFile: configPath,
+      template: {},
+    });
+
+    assert.throws(
+      () => manager.resolveConnection('no-such-host', 'bastion'),
+      /not set and no such host alias/,
+    );
   });
 
   it('builds a connection from a host alias', () => {
@@ -98,7 +229,7 @@ describe('SSH config connections resolved on demand', () => {
 
     assert.deepStrictEqual(
       manager.getSshConfigHosts().map((host) => host.alias),
-      ['prod-master', 'dev-master'],
+      ['prod-master', 'dev-master', 'bastion', 'old-master'],
     );
   });
 
