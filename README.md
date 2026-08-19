@@ -95,8 +95,8 @@ Raw JSON:
 
 Дальше агент работает так:
 
-1. Вызывает `list-ssh-hosts` и находит нужный алиас, например `r-ulybka-prod-master`. У больших конфигов список режется, поэтому агент передаёт `filter`: подстроку или шаблон вида `r-ulybka-*`.
-2. Вызывает `execute-command` с `connectionName: "r-ulybka-prod-master"`.
+1. Вызывает `list-ssh-hosts` и находит нужный алиас, например `prod-master`. У больших конфигов список режется, поэтому агент передаёт `filter`: подстроку или шаблон вида `prod-*`.
+2. Вызывает `execute-command` с `connectionName: "prod-master"`.
 3. Сервер читает алиас из `~/.ssh/config`, берёт оттуда `HostName`, `User`, `Port`, `IdentityFile` и `ProxyJump`, поднимает соединение и выполняет команду.
 
 Ключ при этом не покидает машину: сервер читает файл сам, в диалог попадает только путь из SSH-конфига. Если `IdentityFile` не указан, берётся ssh-agent из `SSH_AUTH_SOCK`. Алиас без `HostName` подключается по собственному имени, как это делает `ssh`.
@@ -109,7 +109,7 @@ Raw JSON:
 "args": [
   "-y", "@perhamm/ssh-mcp-server",
   "--ssh-config-hosts",
-  "--allowed-hosts", "r-ulybka-*,*-stage-*",
+  "--allowed-hosts", "prod-*,*-stage-*",
   "--ssh-config-file", "/home/user/.ssh/config_work"
 ]
 ```
@@ -225,7 +225,7 @@ node scripts/update-guards.js https://example.com/guards.json /etc/ssh-mcp/guard
   "tool": "execute-command",
   "params": {
     "cmdString": "systemctl restart nginx",
-    "connectionName": "r-ulybka-prod-master",
+    "connectionName": "prod-master",
     "sudo": true
   }
 }
@@ -249,7 +249,7 @@ SOCKS5 на порту 8777:
   "params": {
     "type": "socks5",
     "localPort": 8777,
-    "connectionName": "r-ulybka-prod-master"
+    "connectionName": "prod-master"
   }
 }
 ```
@@ -316,8 +316,8 @@ Verify that fingerprint, add the host to known_hosts, or start the server with -
 Каждый вызов пишется строкой JSON: команда, соединение, флаг sudo, вердикт гварда, длительность, объём вывода. Содержимое вывода в лог не попадает, пароль sudo вырезается.
 
 ```json
-{"time":"2026-08-19T08:12:44.101Z","pid":8123,"event":"command","result":"blocked","connection":"r-ulybka-prod-master","command":"useradd deploy","sudo":true,"code":"COMMAND_VALIDATION_FAILED","reason":"Blocked by the forbidden core ..."}
-{"time":"2026-08-19T08:12:51.880Z","pid":8123,"event":"command","result":"ok","connection":"r-ulybka-prod-master","command":"systemctl status nginx","sudo":false,"durationMs":412,"bytes":1840}
+{"time":"2026-08-19T08:12:44.101Z","pid":8123,"event":"command","result":"blocked","connection":"prod-master","command":"useradd deploy","sudo":true,"code":"COMMAND_VALIDATION_FAILED","reason":"Blocked by the forbidden core ..."}
+{"time":"2026-08-19T08:12:51.880Z","pid":8123,"event":"command","result":"ok","connection":"prod-master","command":"systemctl status nginx","sudo":false,"durationMs":412,"bytes":1840}
 ```
 
 Пишутся события `connect`, `command`, `download`, `upload`, `tunnel-open`, `tunnel-close`, `host-key`.
@@ -387,7 +387,7 @@ Verify that fingerprint, add the host to known_hosts, or start the server with -
 Если у алиаса есть `ProxyJump`, цепочка поднимается сама:
 
 ```
-Host r-ulybka-prod-master
+Host prod-master
     HostName 10.20.30.40
     User ops
     ProxyJump bastion
@@ -405,8 +405,8 @@ Host r-ulybka-prod-master
   "tool": "execute-command",
   "params": {
     "cmdString": "hostname",
-    "connectionName": "r-ulybka.node1-master",
-    "proxyJump": "r-ulybka.prod-master-0"
+    "connectionName": "legacy-master",
+    "proxyJump": "prod-master-0"
   }
 }
 ```

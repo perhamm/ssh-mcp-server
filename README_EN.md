@@ -95,8 +95,8 @@ The MCP client config:
 
 From there the agent works like this:
 
-1. Calls `list-ssh-hosts` and finds the alias it needs, say `r-ulybka-prod-master`. The list is truncated for large configs, so the agent passes `filter`: a substring or a pattern such as `r-ulybka-*`.
-2. Calls `execute-command` with `connectionName: "r-ulybka-prod-master"`.
+1. Calls `list-ssh-hosts` and finds the alias it needs, say `prod-master`. The list is truncated for large configs, so the agent passes `filter`: a substring or a pattern such as `prod-*`.
+2. Calls `execute-command` with `connectionName: "prod-master"`.
 3. The server reads the alias from `~/.ssh/config`, takes `HostName`, `User`, `Port`, `IdentityFile` and `ProxyJump` from it, brings the connection up and runs the command.
 
 The key never leaves the machine: the server reads the file itself and only the path from the SSH config reaches the conversation. When `IdentityFile` is absent, the ssh-agent from `SSH_AUTH_SOCK` is used. An alias without `HostName` connects by its own name, exactly as `ssh` does.
@@ -109,7 +109,7 @@ The list of aliases can be narrowed:
 "args": [
   "-y", "@perhamm/ssh-mcp-server",
   "--ssh-config-hosts",
-  "--allowed-hosts", "r-ulybka-*,*-stage-*",
+  "--allowed-hosts", "prod-*,*-stage-*",
   "--ssh-config-file", "/home/user/.ssh/config_work"
 ]
 ```
@@ -225,7 +225,7 @@ The tool call:
   "tool": "execute-command",
   "params": {
     "cmdString": "systemctl restart nginx",
-    "connectionName": "r-ulybka-prod-master",
+    "connectionName": "prod-master",
     "sudo": true
   }
 }
@@ -249,7 +249,7 @@ SOCKS5 on port 8777:
   "params": {
     "type": "socks5",
     "localPort": 8777,
-    "connectionName": "r-ulybka-prod-master"
+    "connectionName": "prod-master"
   }
 }
 ```
@@ -316,8 +316,8 @@ For the first pass over a fleet it is convenient to run once with `--host-key-ch
 Every call is written as a JSON line: the command, the connection, the sudo flag, the guard verdict, the duration, the size of the output. The output itself never reaches the log and the sudo password is stripped.
 
 ```json
-{"time":"2026-08-19T08:12:44.101Z","pid":8123,"event":"command","result":"blocked","connection":"r-ulybka-prod-master","command":"useradd deploy","sudo":true,"code":"COMMAND_VALIDATION_FAILED","reason":"Blocked by the forbidden core ..."}
-{"time":"2026-08-19T08:12:51.880Z","pid":8123,"event":"command","result":"ok","connection":"r-ulybka-prod-master","command":"systemctl status nginx","sudo":false,"durationMs":412,"bytes":1840}
+{"time":"2026-08-19T08:12:44.101Z","pid":8123,"event":"command","result":"blocked","connection":"prod-master","command":"useradd deploy","sudo":true,"code":"COMMAND_VALIDATION_FAILED","reason":"Blocked by the forbidden core ..."}
+{"time":"2026-08-19T08:12:51.880Z","pid":8123,"event":"command","result":"ok","connection":"prod-master","command":"systemctl status nginx","sudo":false,"durationMs":412,"bytes":1840}
 ```
 
 The events written are `connect`, `command`, `download`, `upload`, `tunnel-open`, `tunnel-close` and `host-key`.
@@ -387,7 +387,7 @@ The server reads `HostName`, `Port`, `User`, `IdentityFile` and `ProxyJump` from
 When an alias carries `ProxyJump`, the chain comes up on its own:
 
 ```
-Host r-ulybka-prod-master
+Host prod-master
     HostName 10.20.30.40
     User ops
     ProxyJump bastion
@@ -405,8 +405,8 @@ When a host is only reachable through a hop the SSH config does not name, the ch
   "tool": "execute-command",
   "params": {
     "cmdString": "hostname",
-    "connectionName": "r-ulybka.node1-master",
-    "proxyJump": "r-ulybka.prod-master-0"
+    "connectionName": "legacy-master",
+    "proxyJump": "prod-master-0"
   }
 }
 ```

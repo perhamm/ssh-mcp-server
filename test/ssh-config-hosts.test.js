@@ -24,7 +24,7 @@ describe('SSH config hosts', () => {
       '    User jump',
       '    Port 2222',
       '',
-      'Host r-ulybka-prod-master r-ulybka-prod-master-1',
+      'Host prod-master prod-master-1',
       '    HostName 10.20.30.40',
       '    User ops',
       '    ProxyJump bastion',
@@ -35,7 +35,7 @@ describe('SSH config hosts', () => {
       '',
       'Host deep',
       '    HostName deep.example.com',
-      '    ProxyJump r-ulybka-prod-master',
+      '    ProxyJump prod-master',
       '',
       'Host *',
       '    Port 22',
@@ -52,15 +52,15 @@ describe('SSH config hosts', () => {
 
       assert.deepStrictEqual(aliases, [
         'bastion',
-        'r-ulybka-prod-master',
-        'r-ulybka-prod-master-1',
+        'prod-master',
+        'prod-master-1',
         'deep',
       ]);
     });
 
     it('resolves the effective values of an alias', () => {
       const hosts = listSshConfigHosts(configPath);
-      const master = hosts.find((host) => host.alias === 'r-ulybka-prod-master');
+      const master = hosts.find((host) => host.alias === 'prod-master');
 
       assert.strictEqual(master.hostName, '10.20.30.40');
       assert.strictEqual(master.user, 'ops');
@@ -112,7 +112,7 @@ describe('SSH config hosts', () => {
     });
 
     it('splices in the chain of a hop that jumps itself', () => {
-      const hops = resolveJumpChain('r-ulybka-prod-master', configPath);
+      const hops = resolveJumpChain('prod-master', configPath);
 
       assert.deepStrictEqual(hops.map((hop) => hop.host), [
         'bastion.example.com',
